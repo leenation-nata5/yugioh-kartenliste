@@ -14,8 +14,8 @@ def run():
     from app_version import APP_VERSION, APP_BUILD
     from ai_scanner_v102 import build_preview_records
 
-    assert APP_VERSION == "11.2"
-    assert APP_BUILD == 1120
+    assert APP_VERSION == "11.2.1"
+    assert APP_BUILD == 1121
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -40,7 +40,8 @@ def run():
         'results = grouped_results',
         "Keine Gruppierung über verschiedene Bildquellen mehr",
         "matched_artwork_preview",
-        "Das Live-Bild wird jetzt ausschließlich im goldenen Kartenrahmen angezeigt",
+        "live_frame_ref[\"widget\"] = camera_clip",
+        "scanner_fullscreen_layout",
         "max_items=250",
         "time.time_ns()",
         "float(best_similarity) < 0.74",
@@ -58,12 +59,12 @@ def run():
 
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     assert "tests/test_v107_isolated_gallery_contract.py" in workflow
-    assert "just-incard-v112-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1121-arm64-api35-ndk25b" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_2.txt"], txt_files
+    assert txt_files == ["CHANGELOG_v11_2_1.txt"], txt_files
 
-    print("v11.2 isolated gallery scan contract tests: OK")
+    print("v11.2.1 isolated gallery scan contract tests: OK")
 
 
 if __name__ == "__main__":

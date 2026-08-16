@@ -60,7 +60,7 @@ def run():
         "class ActionTile",
         "WindowInsets$Type",
         "self.tablet_dashboard",
-        'ScannerSourceTile("gallery", "Galerie"',
+        'source_menu_gallery_bubble',
         "Window.bind(on_keyboard=self._handle_android_back)",
         "def save_session_state",
         "def restore_session_state",
@@ -90,7 +90,7 @@ def run():
     assert (ROOT / "features_v97.py").is_file()
     assert (ROOT / "ci" / "justincard-ci-test.keystore").is_file()
 
-    print("v9.7 UI compatibility under v11.2: OK")
+    print("v9.7 UI compatibility under v11.2.1: OK")
 
 
 if __name__ == "__main__":

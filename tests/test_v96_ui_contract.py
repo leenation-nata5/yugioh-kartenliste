@@ -86,7 +86,7 @@ def run():
         'self.tablet_dashboard',
         'self.middle.orientation = "vertical"',
         'self.middle.orientation = "horizontal"',
-        'ScannerSourceTile("gallery", "Galerie"',
+        'source_menu_gallery_bubble',
         'ui_asset("app_mark")',
         'Window.bind(on_keyboard=self._handle_android_back)',
         'runner = DiagnosticsRunnerV93(os.path.dirname(os.path.abspath(__file__))',
@@ -112,7 +112,7 @@ def run():
     assert required_icons <= available_icons, sorted(required_icons - available_icons)
     assert (ROOT / "docs" / "ui_mockup_v96.png").is_file()
 
-    print("v9.6 UI compatibility under v11.2: OK")
+    print("v9.6 UI compatibility under v11.2.1: OK")
 
 
 if __name__ == "__main__":

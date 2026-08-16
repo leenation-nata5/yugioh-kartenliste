@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Best-Effort-Schutz für Just InCard v11.2.
+"""Best-Effort-Schutz für Just InCard v11.2.1.
 
 Programmierer / Administrator: leenation
 

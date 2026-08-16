@@ -1,6 +1,6 @@
 Programmierer / Administrator: leenation
 
-# Just InCard v11.2
+# Just InCard v11.2.1
 
 Vollständiges Android-/Kivy-Projekt mit KI-Scanner, Sammlung, Deckverwaltung und automatischer Smartphone-/Tablet-Anpassung.
 
@@ -35,7 +35,7 @@ Vollständiges Android-/Kivy-Projekt mit KI-Scanner, Sammlung, Deckverwaltung un
 
 Die App nutzt eine gemeinsame APK und erkennt das Gerät automatisch anhand der verfügbaren dp-Breite, Pixeldichte, Ausrichtung, Schriftgröße und sicheren Systemränder. Smartphones verwenden Bottom-Navigation und einspaltige Seiten. Tablets verwenden bei ausreichender Breite Seitenleiste, mehr Spalten und größere Vorschau-/Scannerflächen.
 
-## Oberfläche v11.2
+## Oberfläche v11.2.1
 
 - zentrales responsives Designsystem in `ui_v110.py`
 - moderne Startseite, Suche, Ergebniskarten, Kartendetails, Scanner, Sammlung und Deckansichten
@@ -49,9 +49,9 @@ Die Release-Konfiguration nutzt Signierung, Zipalign, SHA-256, privaten App-Spei
 
 ## Aktuelle Dokumentation
 
-Nur `CHANGELOG_v11_2.txt` enthält die Änderungen der aktuellen Version.
+Nur `CHANGELOG_v11_2_1.txt` enthält die Änderungen der aktuellen Version.
 
-## Galerie-Multi-Engine-Pipeline in v11.2
+## Galerie-Multi-Engine-Pipeline in v11.2.1
 
 - YOLO, MediaPipe, OpenCV und Pillow liefern getrennte Kartenrahmen-Kandidaten.
 - Überlappende Erkennungen werden per gewichteter Box-Fusion zu einer Kartenfläche zusammengeführt.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Bereitet optionale lokale KI-Modellpakete für Just InCard v11.2 vor.
+"""Bereitet optionale lokale KI-Modellpakete für Just InCard v11.2.1 vor.
 
 Der stabile APK-Core benötigt keinen erfolgreichen Download. Ohne Zusatzpaket
 bleiben ML Kit, OpenCV, die bestehende Bildvorverarbeitung und die lokale
@@ -110,7 +110,7 @@ def download(asset: Dict[str, Any], *, strict: bool = False) -> Dict[str, Any]:
     try:
         request = urllib.request.Request(
             str(asset["url"]),
-            headers={"User-Agent": "JustInCard/11.2 (leenation)"},
+            headers={"User-Agent": "JustInCard/11.2.1 (leenation)"},
         )
         with urllib.request.urlopen(request, timeout=240) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)
@@ -151,7 +151,7 @@ def main() -> int:
         selected.extend(EXTENDED_ASSETS)
     results = prepare(selected, strict=args.strict)
     report = {
-        "version": "11.2",
+        "version": "11.2.1",
         "developer": "leenation",
         "extended": bool(args.extended),
         "results": results,

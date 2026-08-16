@@ -153,6 +153,7 @@ jobs:
           python3 tests/test_v1101_java_hotfix_contract.py 2>&1 | tee logs/test_v1101_java_hotfix_contract.log
           python3 tests/test_v1102_gradle_memory_contract.py 2>&1 | tee logs/test_v1102_gradle_memory_contract.log
           python3 tests/test_v112_scanner_ui_contract.py 2>&1 | tee logs/test_v112_scanner_ui_contract.log
+          python3 tests/test_v1121_ci_legacy_contract_hotfix.py 2>&1 | tee logs/test_v1121_ci_legacy_contract_hotfix.log
 
       - name: Freien Speicher vorbereiten
         shell: bash
@@ -168,9 +169,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer_home
-          key: just-incard-v112-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
+          key: just-incard-v1121-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
           restore-keys: |
-            just-incard-v112-arm64-api35-ndk25b-${{ runner.os }}-
+            just-incard-v1121-arm64-api35-ndk25b-${{ runner.os }}-
 
       - name: Build-Verzeichnisse sauber vorbereiten
         shell: bash

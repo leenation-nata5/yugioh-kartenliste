@@ -1,0 +1,24 @@
+Just InCard v11.2.1
+Build: 1121
+Channel: stable
+Developer/Admin: leenation
+
+GitHub-Actions-Hotfix
+
+- Die beiden bereitgestellten GitHub-Logs wurden vollständig geprüft.
+- Beide Läufe brachen noch vor dem eigentlichen Android-/Gradle-Build im Test test_v96_ui_contract.py ab.
+- Ursache: Der alte UI-Kompatibilitätstest erwartete weiterhin den entfernten Scanner-Code ScannerSourceTile("gallery", "Galerie"), obwohl v11.2 bereits das neue Bubble-Menü source_menu_gallery_bubble nutzt.
+- test_v96_ui_contract.py wurde auf die neue Scanner-UI angepasst.
+- test_v97_ui_contract.py enthielt denselben veralteten ScannerSourceTile-Vertrag und wurde ebenfalls korrigiert.
+- test_v107_isolated_gallery_contract.py erwartete zusätzlich einen alten Live-Scanner-Hinweistext. Der Vertrag prüft jetzt die tatsächlich aktive Vollbild-/Camera-Clip-Implementierung.
+- Neuer Regressionstest test_v1121_ci_legacy_contract_hotfix.py verhindert, dass diese veralteten UI-Verträge erneut in den GitHub-Workflow gelangen.
+- Der GitHub-Workflow führt den neuen Regressionstest jetzt vor dem Android-Build aus.
+- Preflight wurde um den neuen Test und dessen Workflow-Prüfung erweitert.
+- Versions- und Cache-Metadaten auf 11.2.1 / Build 1121 / v1121 aktualisiert.
+- Die Scanner-Funktionen und das neue responsive Vollbild-Layout aus v11.2 bleiben unverändert erhalten.
+- Der Gradle/OpenCV-Speicher-Hotfix mit 4096 MB Heap bleibt erhalten.
+- Nur dieser aktuelle Changelog wird ausgeliefert.
+
+Wichtig
+
+Die hochgeladenen Läufe enthalten keinen eigentlichen Gradle-/APK-Fehler. GitHub Actions wurde durch den veralteten Python-UI-Test beendet, bevor Buildozer/Gradle gestartet werden konnte. Erst ein neuer Lauf mit v11.2.1 kann daher zeigen, ob danach noch ein Android-spezifischer Buildfehler folgt.
