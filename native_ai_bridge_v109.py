@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Sicherer Python-Adapter für die optionalen Android-KI-Bridges in v11.3.0."""
+"""Sicherer Python-Adapter für die optionalen Android-KI-Bridges in v12.0.0."""
 from __future__ import annotations
 import json
 import os

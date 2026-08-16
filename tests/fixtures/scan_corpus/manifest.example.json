@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "privacy": "Keine Kartenbilder oder OCR-Rohtexte im Repository; nur anonymisierte Messwerte.",
+  "records": [
+    {
+      "case_id": "phone-bright-straight-001",
+      "device_class": "phone",
+      "source": "live",
+      "lighting": "bright",
+      "angle": "straight",
+      "language": "de",
+      "correct": true,
+      "false_positive": false,
+      "latency_ms": 420
+    },
+    {
+      "case_id": "tablet-lowlight-angle-001",
+      "device_class": "tablet",
+      "source": "gallery",
+      "lighting": "low",
+      "angle": "oblique",
+      "language": "en",
+      "correct": true,
+      "false_positive": false,
+      "latency_ms": 780
+    }
+  ]
+}

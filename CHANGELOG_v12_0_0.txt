@@ -1,0 +1,94 @@
+Just InCard v12.0.0
+Build: 1200
+Channel: stable
+Programmierer/Admin: leenation
+
+Vollständige UI-, Scanner-, Leistungs- und Qualitätsüberarbeitung
+
+Adaptives Design
+
+- Modernes Navy-/Graphit-/Gold-Design nach der gewünschten visuellen Richtung.
+- Neues eigenständiges Scanner-Hintergrundasset ohne fremdes Kartenmotiv, Logo oder lesbaren Markentext.
+- Layoutentscheidungen folgen verfügbarer Fensterbreite, Dichte, Schriftfaktor und begrenzten Systemrändern statt festen Pixelpositionen oder Gerätemodellen.
+- Eine APK wechselt dynamisch zwischen Bottom-Navigation, Tablet-Navigation-Rail, Hochformat, Querformat, Split-Screen und Foldable-Fenstern.
+- Inhalte erhalten sichere Maximalbreiten, responsive Raster, mindestens 48-dp-Touchziele und entprellte Reflows.
+- Reduzierte Bewegung, große Touchziele, hoher Fokuskontrast, WLAN-only-Bilder und Cachelimit bleiben konfigurierbar.
+
+Scanner und Bubble-Menü
+
+- Kivy-Scanner vollständig in echte Layoutschichten für Header, Kamera, Ergebnis und Quellenmenü getrennt.
+- Quelle, Status und Gerätename können sich auf keiner Fensterklasse mehr überlagern.
+- Quellenmenü ist geschlossen wirklich unsichtbar, deaktiviert und ohne Touch-Abfangfläche.
+- Menü schließt über „Schließen“, Tipp außerhalb, erneuten Scan-Reiter, Android-Zurück sowie vor Kamera-/Galerieauswahl.
+- Treffer blendet den Quellenstarter aus; Verwerfen oder Übernehmen startet kontrolliert den nächsten Scan.
+- Live-Serienmodus zählt bestätigte Karten, gibt haptisches Feedback und blockiert direkte Duplikate 3,5 Sekunden.
+- Ergebnisbereich zeigt Set, Rarity, Sprache, Sicherheit, Evidenz, Bildqualität, Bestand und alternative Kandidaten.
+- Bildqualitätsfeedback nennt Dunkelheit, Blendung, Bewegung, Fokus, Abstand und Kontrast.
+
+Native CameraX-Pipeline
+
+- Neue responsive CameraX-Aktivität für Smartphone, Tablet und Foldables.
+- PreviewView verwendet FILL_CENTER; der Kartenrahmen behält 1:1,452 und dunkelt den Außenbereich ab.
+- Smartphone-Steuerung nutzt zwei sichere Reihen, Tablet-Steuerung eine breite Reihe.
+- Tipp-Fokus, Taschenlampe, Belichtung, manuelle Aufnahme und Auto-Modus ergänzt.
+- ML-Kit-Liveanalyse läuft auf einem einzelnen Hintergrund-Executor mit KEEP_ONLY_LATEST und 420-ms-Drosselung.
+- OCR wird auf den Kartenbereich begrenzt; Autoaufnahme benötigt drei gleichartige, ruhige, ausreichend helle Frames.
+- Schließen, Android-Zurück und Activity-Zerstörung lösen Kamera, Analyzer, Recognizer und Executor zuverlässig.
+
+Leistung und Stabilität
+
+- Große Sammlungsauswahl im Deckbuilder auf echte RecycleView-Virtualisierung umgestellt.
+- Deckfilter um 180 ms, Scanner-Resize und allgemeine UI-Reflows entprellt.
+- Such- und Sammlungsseiten bleiben auf 50 Einträge begrenzt und werden in UI-Batches aufgebaut.
+- Vorschaulisten laden kleine Artwork-Varianten; hochauflösende Bilder werden erst in Details geladen.
+- SQLite verwendet WAL, NORMAL-Synchronisierung, neue Indizes und gebündelte Hintergrundpersistenz.
+- Sammlungsmetadaten werden nach additiver Schema-v3-Migration vollständig in SQLite erhalten.
+- Preisabfragen liefern die neuesten Messpunkte korrekt chronologisch; Verlauf ist auf 366 Punkte pro Karte begrenzt.
+- Bild-/Scanner-Cache wird nach Alter und Gesamtgröße begrenzt.
+
+Sammlung, Preise und Listen
+
+- Zustand, Sprache, Auflage, Lagerort, Kaufdatum, Kaufpreis, Notiz und Marktwert pro Variante.
+- Lokaler Preisverlauf und Trendanzeige.
+- Wunschliste funktioniert auch für noch nicht besessene Suchkarten; gewünschte Menge bleibt gespeichert.
+- Tauschliste und geschätzter Sammlungswert im Dashboard.
+- SQLite-Spiegel bewahrt jetzt auch alle Metadaten statt nur Karte und Anzahl.
+
+Decks
+
+- Bis zu 50 Decks und fünf Favoriten.
+- .ydk-Import und -Export für EDOPro/YGOPro-kompatible Passcodelisten.
+- Kompakter Offline-Deckcode sowie QR-Erzeugung und Android-Teilen.
+- TCG-, OCG-, GOAT- und Speed-Duel-Prüfung für Zonen, Kartenzahl, Drei-Kopien-Regel und vorhandene Banlist-Metadaten.
+- Unbekannte .ydk-Passcodes bleiben als planbare Platzhalter erhalten.
+
+Offline-Datenbank
+
+- Prüfsummenvalidierte .jicpack-Delta-Pakete mit Upsert/Delete und maximal 50.000 Operationen.
+- Delta-Import läuft im Hintergrund, ist auf 64 MB begrenzt und speichert einen Rollback-Stand.
+- Letztes Delta kann vollständig zurückgesetzt werden; Vollsync und Reparatur bleiben verfügbar.
+
+Sicherheit und Backups
+
+- OpenAI-API-Schlüssel wird auf Android mit AES-GCM und nicht exportierbarem Android-Keystore-Schlüssel gespeichert.
+- API-Schlüssel bleibt aus JSON, SQLite-Backups und Diagnoseberichten ausgeschlossen; alte Klartexteinstellung wird einmalig migriert.
+- Optionales gerätegebundenes .jicbak-Backup mit Streaming-AES-GCM ergänzt.
+- Standard-ZIP-Backup bleibt für Gerätewechsel verfügbar.
+- Private App-Daten, deaktiviertes Android-Systembackup, Integritätsmanifest, Release-Signierung, Zipalign und SHA-256 bleiben aktiv.
+
+Build und Qualitätssicherung
+
+- Android min API 24, target API 35, NDK 27c und arm64-v8a.
+- python-for-android auf offiziellen Release v2026.05.09 und offizielles Buildozer-Docker-Image per SHA-256-Digest fixiert.
+- Optional signiertes Google-Play-AAB neben Debug-/Release-APK im GitHub-Workflow.
+- Neuer v12-Coretest für YDK, Deckprüfung, Seriengate, Marktwerte, Delta-Rollback und SQLite-Migration.
+- Responsive Fuzz-Matrix prüft mehr als 8.000 Fensterzustände zwischen 240 und 2.000 dp.
+- Neue Android-Verträge prüfen CameraX-Threading, Ressourcenfreigabe, Keystore und Buildkonfiguration.
+- Scanner-Benchmark-Harness und anonymisiertes Corpus-Manifest ergänzt.
+- Alle historischen Regressionstests bleiben Teil des Preflight.
+
+Hinweis zur Prüfung
+
+- In dieser Entwicklungsumgebung wurden Python-Syntax, Preflight, Geometrie-Fuzzing, Datenmigrationen und statische Android-Verträge ausgeführt.
+- Die echte APK-/AAB-Kompilierung und die abschließende Kamera-/Gerätematrix laufen im enthaltenen GitHub-Actions-Workflow beziehungsweise auf realen Android-Geräten.
+- Ein vollständiger Schutz vor Reverse Engineering oder eine Garantie für jedes herstellerspezifische Android-ROM ist technisch nicht möglich; die App verwendet deshalb ausschließlich Fensterklassen, defensive Fallbacks und dokumentierte Gerätetests.

@@ -21,7 +21,14 @@ ROOT = Path(__file__).resolve().parent
 def main() -> int:
     integrity_path = ROOT / "security_integrity_manifest.json"
     metadata_path = ROOT / "security_build_metadata.json"
-    create_integrity_manifest(str(ROOT), str(integrity_path), include_exts=(".py", ".json", ".png", ".kv"))
+    create_integrity_manifest(
+        str(ROOT),
+        str(integrity_path),
+        include_exts=(
+            ".py", ".json", ".png", ".jpg", ".jpeg", ".webp", ".kv",
+            ".tflite", ".task", ".onnx", ".vocab",
+        ),
+    )
     metadata = build_security_metadata(APP_VERSION, APP_BUILD)
     metadata.update({"developer": APP_DEVELOPER, "admin": APP_ADMIN})
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

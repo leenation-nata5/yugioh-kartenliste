@@ -8,8 +8,8 @@ source.include_exts = py,pyc,json,png,jpg,jpeg,webp,kv,tflite,task,onnx,vocab
 source.exclude_dirs = .git,.github,.buildozer,bin,__pycache__,logs,tests,scripts,docs,ci
 source.exclude_patterns = preflight_check.py,apk_validate.py,prepare_release_hardening.py,prepare_ai_models_v109.py
 
-version = 11.3.0
-requirements = python3,kivy,openssl,certifi,pyjnius,plyer,pillow
+version = 12.0.0
+requirements = python3,kivy,openssl,certifi,pyjnius,plyer,pillow,qrcode
 
 # Hoch- und Querformat; die App wählt beim Start und bei Größenänderungen
 # automatisch Smartphone-/Tablet-Layout.
@@ -23,10 +23,10 @@ android.presplash_color = #020512
 android.permissions = INTERNET,CAMERA,FLASHLIGHT,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_IMAGES,READ_MEDIA_VISUAL_USER_SELECTED,POST_NOTIFICATIONS
 android.api = 35
 android.minapi = 24
-android.ndk = 25b
+android.ndk = 27c
 android.ndk_api = 24
 android.accept_sdk_license = True
-# v11.3.0: bewusst nur 64-Bit ARM. Der vollständige GitHub-Log zeigte einen
+# v12.0.0: bewusst nur 64-Bit ARM. Der vollständige GitHub-Log zeigte einen
 # defekten, zwischen zwei ABI-Durchläufen wiederverwendeten pip-Venv.
 # Ein einzelnes ABI beseitigt diesen Fehler und unterstützt aktuelle Android-Geräte.
 android.archs = arm64-v8a
@@ -49,14 +49,15 @@ android.gradle_dependencies = com.google.mlkit:text-recognition:16.0.1,com.googl
 android.add_compile_options = "sourceCompatibility = 1.8", "targetCompatibility = 1.8"
 android.add_packaging_options = "pickFirst 'lib/**/libc++_shared.so'", "exclude 'META-INF/DEPENDENCIES'", "exclude 'META-INF/LICENSE*'", "exclude 'META-INF/NOTICE*'", "exclude 'META-INF/*.kotlin_module'", "exclude 'META-INF/INDEX.LIST'"
 android.add_gradle_repositories = "google()", "mavenCentral()"
-android.numeric_version = 1130
+android.numeric_version = 1200
 
 # Native KI-Bridges (ML Kit, OpenCV, ONNX/YOLO).
 android.add_src = android_src
 android.extra_manifest_xml = android_manifest_extra.xml
 p4a.hook = p4a_manifest_hook.py
+# Reproduzierbarer, offizieller p4a-Release statt beweglichem develop-Branch.
+p4a.branch = v2026.05.09
 
 [buildozer]
 log_level = 2
 warn_on_root = 1
-

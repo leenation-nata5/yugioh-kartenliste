@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Just InCard v11.3.0 für Android/Kivy
+Just InCard v12.0.0 für Android/Kivy
 - schnelle Kartensuche über YGOPRODeck API v7
 - deutsche Suche als Standard, Sprache auswählbar
 - Sammlung/Decks/Einstellungen primär in SQLite, JSON als kompatible Sicherung
@@ -9,7 +9,7 @@ Just InCard v11.3.0 für Android/Kivy
 - Light/Dark Theme Umschalter
 - seitenweise Ergebnisanzeige für mehr Stabilität bei vielen Treffern
 - App-Logo über app_logo.png personalisierbar
-- scannerzentrierte v11.3.0-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
+- scannerzentrierte v12.0.0-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
   Mehrkarten-/Artwork-Fallback und geräteadaptiven Vollseiten-Prüfansichten
 """
 
@@ -140,6 +140,17 @@ from scanner_v100 import (
     scan_mode_profile,
     script_fallback_order,
 )
+from features_v120 import (
+    collection_market_summary,
+    compact_deck_share_payload,
+    export_ydk,
+    parse_deck_share_payload,
+    parse_ydk,
+    price_trend,
+    validate_deck,
+)
+from ui_v120 import adaptive_chrome as adaptive_chrome_v120, source_menu_geometry as source_menu_geometry_v120
+from data_packs_v120 import apply_delta_pack, rollback_delta_pack, validate_pack
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -168,8 +179,11 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.textinput import TextInput
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.widget import Widget
+from kivy.uix.recycleview import RecycleView
+from kivy.uix.recycleboxlayout import RecycleBoxLayout
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 
-# KI-Scanner v11.3.0: lokaler Modellstapel fuer Galerie-Genauigkeit
+# KI-Scanner v12.0.0: lokaler Modellstapel fuer Galerie-Genauigkeit
 API_URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 CARDSETS_URL = "https://db.ygoprodeck.com/api/v7/cardsets.php"
 CARDSETS_CACHE = None
@@ -238,7 +252,7 @@ def ui_asset(name):
     filename = str(name or "").strip()
     if not filename:
         return ""
-    if not filename.lower().endswith(".png"):
+    if not filename.lower().endswith((".png", ".webp", ".jpg", ".jpeg")):
         filename += ".png"
     relative = os.path.join(UI_ICON_DIR, filename)
     return resource_find(relative) or (relative if os.path.exists(relative) else "")
@@ -409,7 +423,7 @@ def get_android_screen_metrics_snapshot():
 
 
 def build_ui_profile(metrics=None, window_size=None):
-    """Erstellt das zentrale v11.3.0-UI-Profil für Android-Fenster jeder Größe.
+    """Erstellt das zentrale v12.0.0-UI-Profil für Android-Fenster jeder Größe.
 
     Die eigentliche Breakpoint-Logik liegt in :mod:`ui_v110` und wird dort ohne
     Kivy-Abhängigkeit gegen viele Smartphone-/Tabletgrößen getestet. Android-
@@ -553,6 +567,63 @@ def android_haptic_feedback(duration_ms=35):
         else:
             vibrator.vibrate(int(duration_ms))
         return True
+    except Exception:
+        return False
+
+
+def android_secure_secret_get(name="openai_api_key"):
+    """Read an Android-only secret from a hardware-backed Keystore key."""
+    if platform != "android":
+        return ""
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Store = autoclass("org.yugioh.kartenliste.SecureSecretStore")
+        return str(Store.get(PythonActivity.mActivity, str(name)) or "")
+    except Exception:
+        return ""
+
+
+def android_secure_secret_set(value, name="openai_api_key"):
+    if platform != "android":
+        return False
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Store = autoclass("org.yugioh.kartenliste.SecureSecretStore")
+        return bool(Store.put(PythonActivity.mActivity, str(name), str(value or "")))
+    except Exception:
+        return False
+
+
+def android_share_text(value, title="Just InCard teilen"):
+    """Open Android's chooser without exposing a file:// URI."""
+    if platform != "android":
+        return False
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Intent = autoclass("android.content.Intent")
+        activity = PythonActivity.mActivity
+        intent = Intent(Intent.ACTION_SEND)
+        intent.setType("text/plain")
+        intent.putExtra(Intent.EXTRA_TEXT, str(value or ""))
+        activity.startActivity(Intent.createChooser(intent, str(title or "Teilen")))
+        return True
+    except Exception:
+        return False
+
+
+def android_device_backup_crypt(input_path, output_path, decrypt=False):
+    """Encrypt/decrypt a backup with a non-exportable device Keystore key."""
+    if platform != "android":
+        return False
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass("org.kivy.android.PythonActivity")
+        Cipher = autoclass("org.yugioh.kartenliste.SecureBackupCipher")
+        method = Cipher.decrypt if decrypt else Cipher.encrypt
+        return bool(method(PythonActivity.mActivity, str(input_path), str(output_path)))
     except Exception:
         return False
 
@@ -1959,6 +2030,17 @@ def get_image_url(card):
     images = card.get("card_images") or []
     if images:
         return images[0].get("image_url") or images[0].get("image_url_small") or ""
+    return ""
+
+
+def get_thumbnail_url(card):
+    """Prefer the API's small artwork for lists; reserve full images for detail views."""
+    artwork = card.get("_artwork_image")
+    if isinstance(artwork, dict):
+        return artwork.get("image_url_small") or artwork.get("image_url") or ""
+    images = card.get("card_images") or []
+    if images:
+        return images[0].get("image_url_small") or images[0].get("image_url") or ""
     return ""
 
 
@@ -3968,6 +4050,56 @@ class ModernChip(ButtonBehavior, SurfaceBox):
         self.label.color = TEXT if self.active else MUTED
 
 
+class DeckPickerRecycleRow(RecycleDataViewBehavior, SurfaceBox):
+    """A recycled deck-builder row; only visible rows allocate Kivy widgets."""
+    def __init__(self, **kwargs):
+        super().__init__(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(100),
+            spacing=dp(8),
+            padding=dp(8),
+            bg_color=CARD_BG,
+            border_color=tuple(list(ACCENT[:3]) + [0.14]),
+            radius=dp(16),
+            **kwargs,
+        )
+        self._row_data = {}
+        self.info = DarkLabel(text="", markup=True, size_hint_x=0.60, font_size=ui_font_px(10.8, body=True))
+        self.add_widget(self.info)
+        controls = GridLayout(cols=3, spacing=dp(6), size_hint_x=0.40)
+        self.add_button = DarkButton(text="+", bg=SUCCESS, compact=True)
+        self.minus_button = DarkButton(text="−", bg=DANGER, compact=True)
+        self.delete_button = DarkButton(text="Löschen", bg=DANGER, compact=True, no_wrap=True)
+        self.add_button.bind(on_release=lambda *_: self._dispatch("on_add"))
+        self.minus_button.bind(on_release=lambda *_: self._dispatch("on_remove"))
+        self.delete_button.bind(on_release=lambda *_: self._dispatch("on_delete"))
+        controls.add_widget(self.add_button)
+        controls.add_widget(self.minus_button)
+        controls.add_widget(self.delete_button)
+        self.add_widget(controls)
+
+    def _dispatch(self, key):
+        callback = self._row_data.get(key)
+        if callable(callback):
+            callback(self._row_data.get("collection_key"), self._row_data.get("card") or {})
+
+    def refresh_view_attrs(self, rv, index, data):
+        self._row_data = dict(data or {})
+        title = html_escape(str(self._row_data.get("title") or "Unbekannte Karte"))
+        subtitle = html_escape(str(self._row_data.get("subtitle") or ""))
+        self.info.text = f"[b]{title}[/b]\n{subtitle}"
+        owned = max(0, int(self._row_data.get("owned") or 0))
+        used = max(0, int(self._row_data.get("used") or 0))
+        self.add_button.disabled = used >= owned
+        self.minus_button.disabled = used <= 0
+        self.delete_button.disabled = used <= 0
+        self.add_button.set_surface_colors(SUCCESS if used < owned else INPUT_BG_2, None)
+        self.minus_button.set_surface_colors(DANGER if used > 0 else INPUT_BG_2, None)
+        self.delete_button.set_surface_colors(DANGER if used > 0 else INPUT_BG_2, None)
+        return self
+
+
 class EmptyStateCard(SurfaceBox):
     """Ruhiger Leer-/Fehlerzustand statt nacktem Text im Layout."""
     def __init__(self, title, message, icon_name="cards", **kwargs):
@@ -4189,20 +4321,21 @@ class ActionTile(ButtonBehavior, SurfaceBox):
 
 class ScannerSourceTile(ButtonBehavior, SurfaceBox):
     """Große, moderne Scanquellen-Kachel mit eindeutigem Aktivzustand."""
-    def __init__(self, icon_name, title, subtitle, active=False, **kwargs):
+    def __init__(self, icon_name, title, subtitle, active=False, accent=None, **kwargs):
         self.source_active = bool(active)
+        self.tile_accent = accent or ACCENT
         super().__init__(
             orientation="horizontal",
             spacing=dp(8),
             padding=(dp(10), dp(7)),
-            bg_color=tuple(list(ACCENT[:3]) + [0.16 if active else 0.05]),
-            border_color=tuple(list(ACCENT[:3]) + [0.60 if active else 0.18]),
+            bg_color=tuple(list(self.tile_accent[:3]) + [0.18 if active else 0.09]),
+            border_color=tuple(list(self.tile_accent[:3]) + [0.64 if active else 0.28]),
             radius=dp(18),
             **kwargs,
         )
         icon_box = SurfaceBox(
             orientation="vertical", size_hint=(None, 1), width=dp(40), padding=dp(8),
-            bg_color=tuple(list(ACCENT[:3]) + [0.15]), border_color=(0, 0, 0, 0), radius=dp(13),
+            bg_color=tuple(list(self.tile_accent[:3]) + [0.16]), border_color=(0, 0, 0, 0), radius=dp(13),
         )
         icon_box.add_widget(Image(source=ui_asset(icon_name), allow_stretch=True, keep_ratio=True))
         self.add_widget(icon_box)
@@ -4216,11 +4349,16 @@ class ScannerSourceTile(ButtonBehavior, SurfaceBox):
     def set_active(self, active):
         self.source_active = bool(active)
         self.set_surface_colors(
-            tuple(list(ACCENT[:3]) + [0.16 if self.source_active else 0.05]),
-            tuple(list(ACCENT[:3]) + [0.68 if self.source_active else 0.18]),
+            tuple(list(self.tile_accent[:3]) + [0.18 if self.source_active else 0.09]),
+            tuple(list(self.tile_accent[:3]) + [0.68 if self.source_active else 0.28]),
         )
         self.title_label.color = TEXT if self.source_active else MUTED
         self.subtitle_label.color = TEXT if self.source_active else HINT
+
+    def set_label(self, title, subtitle=None):
+        self.title_label.text = f"[b]{html_escape(str(title or ''))}[/b]"
+        if subtitle is not None:
+            self.subtitle_label.text = str(subtitle or "")
 
 
 class AdaptivePopup(Popup):
@@ -4683,7 +4821,7 @@ class YuGiOhApp(App):
                 self.show_home_page()
 
     def show_home_page(self, *_):
-        """Moderne v11.3.0-Startseite mit klaren Aktionen und sicheren Höhen."""
+        """Moderne v12.0.0-Startseite mit klaren Aktionen und sicheren Höhen."""
         current = getattr(self, "_active_inline_page", None)
         if current is not None:
             self._close_inline_page(current, navigate=False)
@@ -5166,10 +5304,10 @@ class YuGiOhApp(App):
             if not result.get("ok"):
                 self.append_crash_log(
                     "Integritätsabweichung: " + json.dumps(result, ensure_ascii=False),
-                    "Security v11.3.0",
+                    "Security v12.0.0",
                 )
         except Exception as exc:
-            self.append_crash_log(exc, "Security v11.3.0")
+            self.append_crash_log(exc, "Security v12.0.0")
 
     def load_settings(self):
         data = {}
@@ -5184,13 +5322,31 @@ class YuGiOhApp(App):
             self.permissions_requested = bool(data.get("permissions_requested", False))
             self.database_install_prompted = bool(data.get("database_install_prompted", False))
             self.first_launch_welcome_seen = bool(data.get("first_launch_welcome_seen", False))
-            self.openai_api_key = data.get("openai_api_key", "") or ""
+            legacy_api_key = str(data.get("openai_api_key", "") or "")
+            if platform == "android":
+                self.openai_api_key = android_secure_secret_get() or legacy_api_key
+                if legacy_api_key:
+                    # One-time migration from the legacy JSON/SQLite field. Once
+                    # the Keystore write succeeds, scrub the plaintext copy now
+                    # instead of waiting for the next lifecycle save.
+                    if android_secure_secret_set(legacy_api_key):
+                        sanitized = dict(data)
+                        sanitized["openai_api_key"] = ""
+                        try:
+                            if getattr(self, "app_db", None) is not None:
+                                self.app_db.set_value("app", "settings", sanitized)
+                            atomic_write_json(self.settings_file, sanitized)
+                        except Exception:
+                            pass
+            else:
+                self.openai_api_key = legacy_api_key
             self.openai_model = data.get("openai_model", DEFAULT_OPENAI_MODEL) or DEFAULT_OPENAI_MODEL
             self.cloud_ai_scan_enabled = bool(data.get("cloud_ai_scan_enabled", False))
             self.privacy_settings_v104 = dict(DEFAULT_PRIVACY_V104)
             self.privacy_settings_v104.update(data.get("privacy_v104") or {})
             self.auto_backup_enabled = bool(data.get("auto_backup_enabled", True))
             self.scan_mode = data.get("scan_mode", "normal") if data.get("scan_mode", "normal") in {"schnell", "normal"} else "normal"
+            self.series_scan_enabled = bool(data.get("series_scan_enabled", True))
             perf = str(data.get("performance_mode", "auto") or "auto")
             self.performance_mode = perf if perf in {"auto", "eco", "balanced", "quality"} else "auto"
             accessibility = normalize_accessibility_settings(data)
@@ -5212,6 +5368,7 @@ class YuGiOhApp(App):
             self.privacy_settings_v104 = dict(DEFAULT_PRIVACY_V104)
             self.auto_backup_enabled = True
             self.scan_mode = "normal"
+            self.series_scan_enabled = True
             self.performance_mode = "auto"
             self.reduce_motion = False
             self.large_touch_targets = False
@@ -5220,18 +5377,22 @@ class YuGiOhApp(App):
             self.cache_limit_mb = 500
 
     def save_settings(self):
+        if platform == "android":
+            android_secure_secret_set(getattr(self, "openai_api_key", ""))
         payload = {
             "theme": self.theme_name,
             "permissions_requested": self.permissions_requested,
             "database_install_prompted": self.database_install_prompted,
             "first_launch_welcome_seen": bool(getattr(self, "first_launch_welcome_seen", False)),
             "camera_rotation": self.camera_rotation,
-            "openai_api_key": self.openai_api_key,
+            # Android secrets never enter JSON, SQLite backups or diagnostics.
+            "openai_api_key": "" if platform == "android" else self.openai_api_key,
             "openai_model": self.openai_model,
             "cloud_ai_scan_enabled": bool(getattr(self, "cloud_ai_scan_enabled", False)),
             "privacy_v104": dict(getattr(self, "privacy_settings_v104", DEFAULT_PRIVACY_V104)),
             "auto_backup_enabled": bool(getattr(self, "auto_backup_enabled", True)),
             "scan_mode": self.scan_mode,
+            "series_scan_enabled": bool(getattr(self, "series_scan_enabled", True)),
             "performance_mode": self.performance_mode,
             "reduce_motion": bool(self.reduce_motion),
             "large_touch_targets": bool(self.large_touch_targets),
@@ -5760,6 +5921,8 @@ class YuGiOhApp(App):
             self.save_settings()
             self.save_scan_history()
             self.save_session_state(show_popup=False)
+            if getattr(self, "app_db", None) is not None:
+                self.app_db.checkpoint()
         except Exception as exc:
             self.append_crash_log(exc, "on_pause")
         return True
@@ -5770,6 +5933,8 @@ class YuGiOhApp(App):
             self.save_decks(immediate=True)
             self.save_settings()
             self.save_session_state(show_popup=False)
+            if getattr(self, "app_db", None) is not None:
+                self.app_db.checkpoint()
         except Exception as exc:
             self.append_crash_log(exc, "on_stop")
 
@@ -6281,10 +6446,11 @@ class YuGiOhApp(App):
         self.detail_card.add_widget(detail_scroll)
         self.right.add_widget(self.detail_card)
 
-        self.img_btn_row = GridLayout(cols=3, size_hint_y=None, height=dp(50), spacing=dp(8))
+        self.img_btn_row = GridLayout(cols=2 if self.ui_width_below(620) else 4, size_hint_y=None, height=dp(104 if self.ui_width_below(620) else 50), spacing=dp(8), row_default_height=dp(48), row_force_default=True)
         self.img_btn_row.add_widget(DarkButton(text="Artwork", bg=ACCENT_2, no_wrap=True, compact=True, on_release=lambda *_: self.open_selected_image()))
         self.img_btn_row.add_widget(DarkButton(text="Effekttext", bg=ACCENT, no_wrap=True, compact=True, on_release=lambda *_: self.show_selected_effect()))
         self.img_btn_row.add_widget(DarkButton(text="Sets & Reprints", bg=GOLD, no_wrap=True, compact=True, on_release=lambda *_: self.show_selected_reprints()))
+        self.img_btn_row.add_widget(DarkButton(text="Wunschliste", bg=SUCCESS, no_wrap=True, compact=True, on_release=lambda *_: self.toggle_selected_wishlist_v120()))
         self.right.add_widget(self.img_btn_row)
 
         self.middle.add_widget(self.left)
@@ -6441,7 +6607,7 @@ class YuGiOhApp(App):
                 self.append_crash_log(exc, "responsive_inline_page")
 
     def apply_responsive_layout(self, force=False):
-        """Legt die v11.3.0-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
+        """Legt die v12.0.0-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
 
         Wichtig ist nicht die physische Pixelzahl, sondern die Breite in dp. Damit
         sehen verschiedene Smartphones nebeneinander nahezu gleich aus, während
@@ -6581,7 +6747,7 @@ class YuGiOhApp(App):
             self.tablet_dashboard.opacity = 0
             self.tablet_dashboard.disabled = True
 
-            # Suchkarte: Spalten folgen dem zentral getesteten v11.3.0-Profil.
+            # Suchkarte: Spalten folgen dem zentral getesteten v12.0.0-Profil.
             search_cols = max(1, int(profile.get("search_columns") or 1))
             self.search_panel.cols = search_cols
             self.search_panel.spacing = gap
@@ -6632,6 +6798,11 @@ class YuGiOhApp(App):
 
             # Ergebnis-/Detailbereich.
             self.middle.spacing = gap
+            detail_action_cols = 2 if width_dp < 620 else 4
+            self.img_btn_row.cols = detail_action_cols
+            detail_action_rows = int(math.ceil(len(self.img_btn_row.children) / float(detail_action_cols)))
+            self.img_btn_row.height = detail_action_rows * touch + max(0, detail_action_rows - 1) * gap
+            self.img_btn_row.spacing = gap
             if is_tablet:
                 self.middle.orientation = "horizontal"
                 if self.left.parent is not self.middle:
@@ -6690,7 +6861,6 @@ class YuGiOhApp(App):
 
             self.pager_row.height = touch
             self.stats_row.height = dp(98 if not compact_phone else 112)
-            self.img_btn_row.height = touch
             if hasattr(self, "detail_name_label"):
                 self.detail_name_label.font_size = ui_font_px(14.0 if compact_phone else (16.5 if is_tablet else 15.0), profile)
             if hasattr(self, "detail_meta_label"):
@@ -6910,7 +7080,7 @@ class YuGiOhApp(App):
             cards = fetch_cards(filters)
             Clock.schedule_once(lambda *_: self._finish_search(token, cards=cards), 0)
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self._finish_search(token, error=str(exc)), 0)
+            Clock.schedule_once(lambda *_, _message=str(exc): self._finish_search(token, error=_message), 0)
 
     def _finish_search(self, token, cards=None, error=None):
         if token != self._search_token:
@@ -7037,7 +7207,7 @@ class YuGiOhApp(App):
             border_color=tuple(list(GOLD[:3]) + [0.20]),
             radius=dp(14),
         )
-        image_url = get_image_url(card)
+        image_url = get_thumbnail_url(card)
         if image_url:
             card_img = AsyncImage(source=image_url, allow_stretch=True, keep_ratio=True)
             try:
@@ -7236,6 +7406,26 @@ class YuGiOhApp(App):
             return
         self.remove_card(self.selected_card)
 
+    def toggle_selected_wishlist_v120(self):
+        card = dict(getattr(self, "selected_card", None) or {})
+        if not card:
+            self.show_error("Keine Auswahl", "Bitte zuerst eine Karte auswählen.")
+            return
+        key = self._first_matching_collection_key(card)
+        if not key:
+            key = "wish:" + str(get_card_id(card) or hashlib.sha1(str(card.get("name") or "").encode("utf-8")).hexdigest()[:12])
+        flags = self.app_db.get_collection_flags(key)
+        enabled = not bool(flags.get("wishlist"))
+        self.app_db.set_collection_flags(
+            key,
+            wishlist=enabled,
+            trade=bool(flags.get("trade")),
+            desired_count=max(1, int(flags.get("desired_count") or 1)) if enabled else int(flags.get("desired_count") or 0),
+            note=str(card.get("name") or flags.get("note") or ""),
+        )
+        android_haptic_feedback(20)
+        self.set_status(("Zur Wunschliste hinzugefügt: " if enabled else "Von Wunschliste entfernt: ") + str(card.get("name") or "Karte"))
+
     def show_add_card_set_popup(self, card):
         active_set_query = self.set_input.text.strip() if hasattr(self, "set_input") else ""
         card_sets = sorted(dedupe_card_sets_for_display(card.get("card_sets") or [], active_set_query), key=rarity_sort_key)
@@ -7372,9 +7562,21 @@ class YuGiOhApp(App):
         if getattr(self, "app_db", None) is not None:
             self.app_db.save_collection(snapshot)
         atomic_write_json(self.collection_file, snapshot)
-        if bool(getattr(self, "auto_backup_enabled", True)):
+        if bool(getattr(self, "auto_backup_enabled", True)) and self.auto_backup_manager.due():
+            if getattr(self, "app_db", None) is not None:
+                self.app_db.checkpoint()
             self.auto_backup_manager.create(
-                [self.collection_file, self.decks_file, self.settings_file, self.custom_cards_file, self.scan_history_file],
+                [
+                    self.collection_file,
+                    self.decks_file,
+                    self.settings_file,
+                    self.custom_cards_file,
+                    self.scan_history_file,
+                    getattr(self, "scan_learning_file", ""),
+                    getattr(self, "undo_history_file", ""),
+                    getattr(self, "incremental_sync_file", ""),
+                    getattr(self, "app_database_file", ""),
+                ],
                 APP_VERSION,
                 developer=APP_DEVELOPER,
             )
@@ -7988,7 +8190,14 @@ class YuGiOhApp(App):
         def add_from_collection(*_):
             self.open_add_collection_to_deck_popup(deck_index, refresh)
 
-        btn_row = GridLayout(cols=2 if self.ui_width_below(620) else 6, size_hint_y=None, height=dp(100 if self.ui_width_below(620) else 46), spacing=dp(8))
+        btn_row = GridLayout(
+            cols=2 if self.ui_width_below(620) else 6,
+            size_hint_y=None,
+            height=dp(156 if self.ui_width_below(620) else 50),
+            spacing=dp(8),
+            row_default_height=dp(48),
+            row_force_default=True,
+        )
         btn_row.add_widget(DarkButton(text="Karte hinzufügen", bg=SUCCESS, on_release=add_from_collection))
         btn_row.add_widget(DarkButton(text="KI-Ideen", bg=GOLD, on_release=lambda *_: self.show_deck_ideas(deck_index)))
         btn_row.add_widget(DarkButton(text="Testhand", bg=ACCENT_2, on_release=lambda *_: self.open_deck_test_hand_popup(deck_index)))
@@ -7996,6 +8205,19 @@ class YuGiOhApp(App):
         btn_row.add_widget(DarkButton(text="Cover", bg=ACCENT_2, on_release=lambda *_: self.choose_deck_cover_popup(deck_index)))
         btn_row.add_widget(DarkButton(text="Speichern", bg=ACCENT, on_release=save_name))
         wrapper.add_widget(btn_row)
+        exchange_row = GridLayout(
+            cols=2 if self.ui_width_below(620) else 4,
+            size_hint_y=None,
+            height=dp(104 if self.ui_width_below(620) else 50),
+            spacing=dp(8),
+            row_default_height=dp(48),
+            row_force_default=True,
+        )
+        exchange_row.add_widget(DarkButton(text="Format prüfen", bg=SUCCESS, on_release=lambda *_: self.open_deck_validation_v120(deck_index)))
+        exchange_row.add_widget(DarkButton(text="YDK importieren", bg=ACCENT_2, on_release=lambda *_: self.open_ydk_import_v120(deck_index, refresh)))
+        exchange_row.add_widget(DarkButton(text="YDK exportieren", bg=ACCENT_2, on_release=lambda *_: self.export_deck_ydk_v120(deck_index)))
+        exchange_row.add_widget(DarkButton(text="QR / Teilen", bg=GOLD, on_release=lambda *_: self.open_deck_qr_share_v120(deck_index)))
+        wrapper.add_widget(exchange_row)
         popup = self.make_popup("Deck bearbeiten", wrapper, size_hint=(0.96, 0.92))
         close_top.bind(on_release=lambda *_: (save_name(), popup.dismiss()))
         refresh()
@@ -8019,11 +8241,19 @@ class YuGiOhApp(App):
         wrapper.add_widget(filter_row)
         summary = DarkLabel(text="", color=GOLD, size_hint_y=None, height=dp(28))
         wrapper.add_widget(summary)
-        grid = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
-        grid.bind(minimum_height=grid.setter("height"))
-        scroll = ScrollView(bar_width=dp(6), scroll_type=["bars", "content"])
-        scroll.add_widget(grid)
-        wrapper.add_widget(scroll)
+        deck_picker = RecycleView(bar_width=dp(6), scroll_type=["bars", "content"])
+        deck_picker.viewclass = DeckPickerRecycleRow
+        picker_layout = RecycleBoxLayout(
+            default_size=(None, dp(100)),
+            default_size_hint=(1, None),
+            size_hint_y=None,
+            orientation="vertical",
+            spacing=dp(8),
+        )
+        picker_layout.bind(minimum_height=picker_layout.setter("height"))
+        deck_picker.add_widget(picker_layout)
+        wrapper.add_widget(deck_picker)
+        deck_filter_event = {"event": None}
 
         def update_summary():
             summary.text = f"Deck aktuell: {self.deck_card_total(deck)} Karte(n). Du kannst mehrere Karten hinzufügen, ohne dieses Fenster zu schließen."
@@ -8058,7 +8288,7 @@ class YuGiOhApp(App):
                 callback()
             refresh_rows(keep_scroll=True)
 
-        def remove_entry(collection_key):
+        def remove_entry(collection_key, _card=None):
             cards = deck.setdefault("cards", [])
             for idx, entry in enumerate(list(cards)):
                 if entry.get("collection_key") == collection_key:
@@ -8071,7 +8301,7 @@ class YuGiOhApp(App):
                     refresh_rows(keep_scroll=True)
                     return
 
-        def delete_entry(collection_key):
+        def delete_entry(collection_key, _card=None):
             cards = deck.setdefault("cards", [])
             deck["cards"] = [entry for entry in cards if entry.get("collection_key") != collection_key]
             self.save_decks()
@@ -8080,13 +8310,9 @@ class YuGiOhApp(App):
             refresh_rows(keep_scroll=True)
 
         def refresh_rows(keep_scroll=False):
-            old_scroll = getattr(scroll, "scroll_y", 1)
-            grid.clear_widgets()
+            old_scroll = getattr(deck_picker, "scroll_y", 1)
             update_summary()
-            if not self.collection:
-                empty = SurfaceBox(orientation="vertical", size_hint_y=None, height=dp(70), padding=dp(8), bg_color=INPUT_BG)
-                empty.add_widget(DarkLabel(text="Deine Sammlung ist leer.", color=MUTED))
-                grid.add_widget(empty)
+            row_data = []
             query = normalize_search_text(deck_search_input.text.strip())
             selected_type = str(deck_type_spinner.text or "Alle Typen")
             for key, item in self.collection.items():
@@ -8115,32 +8341,279 @@ class YuGiOhApp(App):
                     continue
                 set_name, set_code, rarity = collection_set_label(card)
                 used = self.deck_count_for_collection_key(deck, key)
-                row = SurfaceBox(orientation="horizontal", size_hint_y=None, height=dp(98), spacing=dp(8), padding=dp(8), bg_color=CARD_BG)
-                row.add_widget(DarkLabel(
-                    text=f"[b]{html_escape(card.get('name', ''))}[/b]\nSammlung: {count} • im Deck: {used} • {html_escape(set_code)} • {html_escape(rarity)}",
-                    markup=True,
-                    size_hint_x=0.58,
-                ))
-                controls = GridLayout(cols=3, spacing=dp(6), size_hint_x=0.42)
-                add_btn = DarkButton(text="+", bg=SUCCESS if used < count else INPUT_BG_2, on_release=lambda _btn, k=key, c=card: add_entry(k, c))
-                add_btn.disabled = used >= count
-                minus_btn = DarkButton(text="-", bg=DANGER if used > 0 else INPUT_BG_2, on_release=lambda _btn, k=key: remove_entry(k))
-                minus_btn.disabled = used <= 0
-                del_btn = DarkButton(text="Löschen", bg=DANGER if used > 0 else INPUT_BG_2, on_release=lambda _btn, k=key: delete_entry(k))
-                del_btn.disabled = used <= 0
-                controls.add_widget(add_btn)
-                controls.add_widget(minus_btn)
-                controls.add_widget(del_btn)
-                row.add_widget(controls)
-                grid.add_widget(row)
+                row_data.append({
+                    "collection_key": key,
+                    "card": card,
+                    "title": card.get("name", ""),
+                    "subtitle": f"Sammlung: {count} • im Deck: {used} • {set_code} • {rarity}",
+                    "owned": count,
+                    "used": used,
+                    "on_add": add_entry,
+                    "on_remove": remove_entry,
+                    "on_delete": delete_entry,
+                })
+            if not row_data and not self.collection:
+                row_data.append({
+                    "title": "Deine Sammlung ist leer",
+                    "subtitle": "Füge zuerst Karten über Suche oder Scanner hinzu.",
+                    "owned": 0,
+                    "used": 0,
+                })
+            deck_picker.data = row_data
+            deck_picker.refresh_from_data()
             if keep_scroll:
-                Clock.schedule_once(lambda *_: setattr(scroll, "scroll_y", old_scroll), 0)
+                Clock.schedule_once(lambda *_: setattr(deck_picker, "scroll_y", old_scroll), 0)
 
-        deck_search_input.bind(text=lambda *_: refresh_rows(keep_scroll=False))
-        deck_type_spinner.bind(text=lambda *_: refresh_rows(keep_scroll=False))
+        def schedule_filter_refresh(*_):
+            previous = deck_filter_event.get("event")
+            if previous is not None:
+                try:
+                    previous.cancel()
+                except Exception:
+                    pass
+            deck_filter_event["event"] = Clock.schedule_once(lambda *__: refresh_rows(keep_scroll=False), 0.18)
+
+        deck_search_input.bind(text=schedule_filter_refresh)
+        deck_type_spinner.bind(text=schedule_filter_refresh)
         popup = self.make_popup("Karte hinzufügen", wrapper, size_hint=(0.96, 0.90))
         close_top.bind(on_release=popup.dismiss)
         refresh_rows()
+        popup.open()
+
+    def open_deck_validation_v120(self, deck_index):
+        if not (0 <= deck_index < len(self.decks)):
+            return
+        deck = self.decks[deck_index]
+        content = SurfaceBox(orientation="vertical", spacing=dp(10), padding=dp(10), bg_color=PANEL_BG)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(50), spacing=dp(8))
+        header.add_widget(DarkLabel(text="[b]Format- & Banlistprüfung[/b]", markup=True))
+        close_top = self.make_close_button(bg=INPUT_BG_2)
+        header.add_widget(close_top)
+        content.add_widget(header)
+        format_spinner = DarkSpinner(
+            text=str(deck.get("format") or "TCG").upper(),
+            values=["TCG", "OCG", "GOAT", "SPEED"],
+            size_hint_y=None,
+            height=dp(50),
+        )
+        content.add_widget(format_spinner)
+        report_label = DarkLabel(text="", markup=True, color=TEXT)
+        content.add_widget(report_label)
+        validate_btn = DarkButton(text="Erneut prüfen", bg=SUCCESS, size_hint_y=None, height=dp(50))
+        content.add_widget(validate_btn)
+        popup = self.make_popup("", content, size_hint=(0.92, 0.72))
+
+        def render_report(*_):
+            fmt = str(format_spinner.text or "TCG").upper()
+            deck["format"] = fmt
+            self.save_decks()
+            try:
+                banlist_overrides = self.app_db.get_value("rules", f"banlist_{fmt.lower()}", {}) or {}
+            except Exception:
+                banlist_overrides = {}
+            report = validate_deck(deck, fmt, banlist_overrides)
+            counts = report.get("counts") or {}
+            lines = [
+                f"[b]{html_escape(deck.get('name', 'Deck'))} • {fmt}[/b]",
+                f"Main {counts.get('main', 0)} • Extra {counts.get('extra', 0)} • Side {counts.get('side', 0)}",
+                "",
+            ]
+            if report.get("valid"):
+                lines.append(f"[color={markup_hex(SUCCESS)}][b]Deck ist formatkonform.[/b][/color]")
+            else:
+                lines.append(f"[color={markup_hex(DANGER)}][b]Bitte korrigieren:[/b][/color]")
+                lines.extend("• " + html_escape(item) for item in report.get("errors") or [])
+            if report.get("warnings"):
+                lines.append("")
+                lines.append(f"[color={markup_hex(GOLD)}][b]Hinweise[/b][/color]")
+                lines.extend("• " + html_escape(item) for item in report.get("warnings") or [])
+            lines.extend([
+                "",
+                f"[color={markup_hex(MUTED)}]Die Prüfung nutzt die in den Kartendaten enthaltene {fmt}-Banlist und vorhandene lokale Overrides. Vor Turnieren bitte das offizielle Stichtagsdatum prüfen.[/color]",
+            ])
+            report_label.text = "\n".join(lines)
+
+        close_top.bind(on_release=popup.dismiss)
+        validate_btn.bind(on_release=render_report)
+        format_spinner.bind(text=render_report)
+        render_report()
+        popup.open()
+
+    def export_deck_ydk_v120(self, deck_index):
+        if not (0 <= deck_index < len(self.decks)):
+            return
+        try:
+            deck = self.decks[deck_index]
+            safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", str(deck.get("name") or "Deck")).strip("_") or "Deck"
+            folder = self._writable_export_dir()
+            path = os.path.join(folder, f"JustInCard_{safe_name}_{time.strftime('%Y%m%d_%H%M%S')}.ydk")
+            with open(path, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(export_ydk(deck))
+            self.present_export_file(path, "text/plain", "YDK-Deck erstellt")
+        except Exception as exc:
+            self.show_error("YDK-Export fehlgeschlagen", str(exc))
+
+    def open_ydk_import_v120(self, deck_index=None, callback=None):
+        content = SurfaceBox(orientation="vertical", spacing=dp(9), padding=dp(10), bg_color=PANEL_BG)
+        header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(50), spacing=dp(8))
+        header.add_widget(DarkLabel(text="[b]YDK importieren[/b]", markup=True))
+        close_top = self.make_close_button(bg=INPUT_BG_2)
+        header.add_widget(close_top)
+        content.add_widget(header)
+        content.add_widget(AutoHeightLabel(
+            text="Füge den Inhalt einer .ydk-Datei oder eines Just-InCard-Deckcodes ein. Unbekannte Passcodes bleiben als planbare Karten erhalten.",
+            color=MUTED,
+            min_height=dp(54),
+            font_size=ui_font_px(10.8, body=True),
+        ))
+        ydk_input = DarkInput(multiline=True, hint_text="#main\n89631139\n#extra\n...\n!side", size_hint=(1, 1))
+        content.add_widget(ydk_input)
+        buttons = GridLayout(cols=1 if self.ui_width_below(620) else 3, size_hint_y=None, height=dp(156 if self.ui_width_below(620) else 50), spacing=dp(8))
+        replace_btn = DarkButton(text="Aktuelles Deck ersetzen", bg=GOLD)
+        new_btn = DarkButton(text="Als neues Deck", bg=SUCCESS)
+        file_btn = DarkButton(text=".ydk-Datei wählen", bg=ACCENT_2)
+        buttons.add_widget(replace_btn)
+        buttons.add_widget(new_btn)
+        buttons.add_widget(file_btn)
+        content.add_widget(buttons)
+        popup = self.make_popup("", content, size_hint=(0.94, 0.88))
+
+        def import_value(as_new=False):
+            try:
+                value = str(ydk_input.text or "").strip()
+                if not value:
+                    raise ValueError("Es wurde kein YDK-Inhalt eingefügt.")
+                lookup = {}
+                collection_keys = {}
+                for key, item in self.collection.items():
+                    card = item.get("card") if isinstance(item, dict) else {}
+                    card_id = str(get_card_id(card) or "")
+                    if card_id:
+                        lookup[card_id] = card
+                        lookup[card_id.zfill(8)] = card
+                        collection_keys[card_id] = key
+                        collection_keys[card_id.zfill(8)] = key
+                imported = parse_deck_share_payload(value) if value.startswith("JIC12:") else parse_ydk(value, lookup)
+                imported["name"] = str(imported.get("name") or "Importiertes YDK-Deck")
+                for entry in imported.get("cards") or []:
+                    card_id = str(get_card_id(entry.get("card") or {}) or "")
+                    entry["collection_key"] = collection_keys.get(card_id) or collection_keys.get(card_id.zfill(8), "")
+                if as_new or deck_index is None or not (0 <= int(deck_index) < len(self.decks)):
+                    if len(self.decks) >= MAX_DECKS:
+                        raise ValueError(f"Es sind maximal {MAX_DECKS} Decks möglich.")
+                    self.decks.append(imported)
+                else:
+                    imported["name"] = str(self.decks[int(deck_index)].get("name") or imported["name"])
+                    self.decks[int(deck_index)] = imported
+                self.save_decks()
+                popup.dismiss()
+                if callback:
+                    callback()
+                warning_count = len(imported.get("warnings") or [])
+                self.show_info("YDK importiert", f"{sum(int(item.get('count', 0) or 0) for item in imported.get('cards') or [])} Karten übernommen. Hinweise: {warning_count}.")
+            except Exception as exc:
+                self.show_error("YDK-Import fehlgeschlagen", str(exc))
+
+        def accept_ydk_path(raw_path):
+            try:
+                path = str(raw_path or "")
+                if path.startswith("content://") and platform == "android":
+                    path = copy_android_content_uri_to_file(path, self.user_data_dir, "ydk_import")
+                if not path or not os.path.isfile(path):
+                    raise ValueError("Die YDK-Datei konnte nicht gelesen werden.")
+                if os.path.getsize(path) > 2 * 1024 * 1024:
+                    raise ValueError("Die YDK-Datei ist ungewöhnlich groß und wurde abgelehnt.")
+                with open(path, "r", encoding="utf-8-sig", errors="replace") as handle:
+                    value = handle.read()
+                if "#main" not in value and not value.strip().startswith("JIC12:"):
+                    raise ValueError("Die Datei enthält keinen erkennbaren YDK-Deckinhalt.")
+                ydk_input.text = value
+                self.set_status(f"YDK geladen: {os.path.basename(path)}")
+            except Exception as exc:
+                self.show_error("YDK-Datei", str(exc))
+
+        def choose_ydk_file(*_):
+            import_dir = os.path.join(self.user_data_dir, "imports")
+            os.makedirs(import_dir, exist_ok=True)
+            if platform == "android":
+                started = start_android_document_picker(
+                    import_dir,
+                    "*/*",
+                    "ydk_import",
+                    lambda path: Clock.schedule_once(lambda *_: accept_ydk_path(path), 0),
+                    lambda message: Clock.schedule_once(lambda *_: self.set_status(message), 0),
+                )
+                if started:
+                    return
+            try:
+                from plyer import filechooser
+                def selected(selection):
+                    value = selection[0] if isinstance(selection, (list, tuple)) and selection else (selection or "")
+                    if value:
+                        Clock.schedule_once(lambda *_: accept_ydk_path(str(value)), 0)
+                try:
+                    filechooser.open_file(on_selection=selected, filters=[("YDK-Deck", "*.ydk", "*.txt")])
+                except TypeError:
+                    filechooser.open_file(on_selection=selected)
+            except Exception as exc:
+                self.show_error("YDK-Dateiauswahl", str(exc))
+
+        close_top.bind(on_release=popup.dismiss)
+        replace_btn.bind(on_release=lambda *_: import_value(False))
+        new_btn.bind(on_release=lambda *_: import_value(True))
+        file_btn.bind(on_release=choose_ydk_file)
+        popup.open()
+
+    def open_deck_qr_share_v120(self, deck_index):
+        if not (0 <= deck_index < len(self.decks)):
+            return
+        try:
+            import qrcode
+            deck = self.decks[deck_index]
+            payload = compact_deck_share_payload(deck, str(deck.get("format") or "TCG"))
+            folder = self._writable_export_dir()
+            path = os.path.join(folder, f"JustInCard_Deck_QR_{time.strftime('%Y%m%d_%H%M%S')}.png")
+            qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=8, border=3)
+            qr.add_data(payload)
+            qr.make(fit=True)
+            qr.make_image(fill_color="#07101f", back_color="#f7f9ff").save(path)
+        except Exception as exc:
+            self.show_error("Deck-QR fehlgeschlagen", f"QR konnte nicht erzeugt werden: {exc}")
+            return
+
+        content = SurfaceBox(orientation="vertical", spacing=dp(9), padding=dp(10), bg_color=PANEL_BG)
+        content.add_widget(Image(source=path, allow_stretch=True, keep_ratio=True))
+        content.add_widget(AutoHeightLabel(
+            text=f"[b]{html_escape(deck.get('name', 'Deck'))}[/b]\nOffline-Deckcode ohne Konto oder Cloud. Der QR enthält nur Passcodes, Zonen, Format und Deckname.",
+            markup=True,
+            color=MUTED,
+            halign="center",
+            min_height=dp(62),
+            font_size=ui_font_px(10.5, body=True),
+        ))
+        actions = GridLayout(cols=1 if self.ui_width_below(520) else 3, size_hint_y=None, height=dp(156 if self.ui_width_below(520) else 50), spacing=dp(8))
+        share_btn = DarkButton(text="Deckcode teilen", bg=SUCCESS)
+        save_btn = DarkButton(text="QR speichern", bg=ACCENT_2)
+        close_btn = DarkButton(text="Schließen", bg=INPUT_BG_2)
+        actions.add_widget(share_btn)
+        actions.add_widget(save_btn)
+        actions.add_widget(close_btn)
+        content.add_widget(actions)
+        popup = self.make_popup("Deck teilen", content, size_hint=(0.92, 0.86))
+
+        def share_payload(*_):
+            if android_share_text(payload, "Just InCard Deck teilen"):
+                return
+            try:
+                from kivy.core.clipboard import Clipboard
+                Clipboard.copy(payload)
+                self.show_info("Deckcode kopiert", "Der Deckcode wurde in die Zwischenablage kopiert.")
+            except Exception:
+                self.show_scroll_text("Deckcode", payload)
+
+        share_btn.bind(on_release=share_payload)
+        save_btn.bind(on_release=lambda *_: self.present_export_file(path, "image/png", "Deck-QR erstellt"))
+        close_btn.bind(on_release=popup.dismiss)
         popup.open()
 
     def show_deck_ideas(self, deck_index):
@@ -8965,7 +9438,7 @@ class YuGiOhApp(App):
             except Exception:
                 pass
 
-        image_url = get_image_url(card)
+        image_url = get_thumbnail_url(card)
         if image_url and os.path.exists(str(image_url)):
             set_preview(str(image_url))
         elif image_url:
@@ -8974,7 +9447,7 @@ class YuGiOhApp(App):
                     path = download_card_image(card, self.image_cache_dir)
                     Clock.schedule_once(lambda *_: set_preview(path), 0)
                 except Exception as exc:
-                    Clock.schedule_once(lambda *_: self.set_status(f"Sammlungsbild konnte nicht geladen werden: {short_text(exc, 90)}"), 0)
+                    Clock.schedule_once(lambda *_, _message=str(exc): self.set_status(f"Sammlungsbild konnte nicht geladen werden: {short_text(_message, 90)}"), 0)
             threading.Thread(target=worker, daemon=True).start()
 
     def create_collection_row(self, cid, card, count, render_callback=None, total_callback=None):
@@ -9002,7 +9475,7 @@ class YuGiOhApp(App):
             orientation="vertical", size_hint=(None, None), width=dp(82), height=top_h,
             padding=dp(4), bg_color=INPUT_BG, border_color=tuple(list(GOLD[:3]) + [0.20]), radius=dp(14),
         )
-        image_url = get_image_url(card)
+        image_url = get_thumbnail_url(card)
         if image_url:
             img = AsyncImage(source=image_url, allow_stretch=True, keep_ratio=True)
             try:
@@ -9135,7 +9608,7 @@ class YuGiOhApp(App):
             title = card.get("name", "Kartenbild")
             Clock.schedule_once(lambda *_: self._open_large_image_popup(path, title), 0)
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self.show_error("Bild konnte nicht geladen werden", str(exc)), 0)
+            Clock.schedule_once(lambda *_, _message=str(exc): self.show_error("Bild konnte nicht geladen werden", _message), 0)
 
     def _open_large_image_popup(self, source, title):
         if not source:
@@ -9393,7 +9866,7 @@ class YuGiOhApp(App):
             fallback_picker(str(exc))
 
     def open_camera_scanner(self):
-        """Vollflächiger Live-Scanner v11.3.0 mit automatischer Erkennung.
+        """Vollflächiger Live-Scanner v12.0.0 mit automatischer Erkennung.
 
         - Die Live-Fläche füllt den verfügbaren Bildschirm responsiv für Smartphones
           und Tablets.
@@ -9430,6 +9903,11 @@ class YuGiOhApp(App):
             "alternatives": [],
             "source": "live",
             "status": "Automatische Erkennung aktiv",
+            "alternative_index": 0,
+            "candidate_cycle": [],
+            "session_count": 0,
+            "last_accept_key": "",
+            "last_accept_at": 0.0,
         }
         source_menu_state = {"open": False}
 
@@ -9451,25 +9929,37 @@ class YuGiOhApp(App):
                 usable_h / density_px,
                 is_tablet=tablet,
             )
+            chrome = adaptive_chrome_v120(
+                usable_w / density_px,
+                usable_h / density_px,
+                is_tablet=tablet,
+                reduce_motion=bool(getattr(self, "reduce_motion", False)),
+            ).as_dict()
             pad = dp(float(logical.get("pad_dp") or 8))
             gap = dp(float(logical.get("gap_dp") or 8))
             bubble_h = dp(float(logical.get("control_height_dp") or 52))
             result_rect = logical.get("result_rect") or (0, 0, 320, 128)
             source_rect = logical.get("source_rect") or (0, 0, 120, 52)
-            source_bubble_w = dp(float(logical.get("bubble_width_dp") or 132))
+            source_geometry = source_menu_geometry_v120(
+                usable_w / density_px,
+                usable_h / density_px,
+                is_tablet=tablet,
+            )
+            source_bubble_w = dp(float(source_geometry.get("bubble_width_dp") or 132))
             return {
                 "pad": pad,
                 "gap": gap,
                 "usable_w": usable_w,
                 "usable_h": usable_h,
                 "bubble_h": bubble_h,
-                "result_w": min(dp(float(result_rect[2])), max(dp(220), usable_w - 2 * pad)),
+                "result_w": min(dp(float(chrome.get("result_width_dp") or result_rect[2])), max(dp(220), usable_w - 2 * pad)),
                 "result_h": dp(float(result_rect[3])),
                 "source_chip_w": dp(float(source_rect[2])),
                 "source_bubble_w": source_bubble_w,
                 "compact": compact,
                 "tablet": tablet,
-                "menu_mode": str(logical.get("menu_mode") or "vertical"),
+                "menu_mode": str(chrome.get("source_menu_mode") or logical.get("menu_mode") or "vertical"),
+                "header_mode": str(chrome.get("scanner_header_mode") or "stacked"),
             }
 
         metrics = scanner_metrics()
@@ -9539,8 +10029,6 @@ class YuGiOhApp(App):
             pass
         device_chip.add_widget(device_chip_label)
         scanner_header_primary.add_widget(device_chip)
-        scanner_header.add_widget(scanner_header_primary)
-
         scan_stage_chip = ModernChip("Automatische Erkennung aktiv", "search", active=True, accent=ACCENT, size_hint=(1, None))
         scan_stage_chip.height = metrics["bubble_h"]
         try:
@@ -9549,17 +10037,58 @@ class YuGiOhApp(App):
             scan_stage_chip.label.max_lines = 1
         except Exception:
             pass
-        scanner_header.add_widget(scan_stage_chip)
+        def configure_scanner_header():
+            # Reparents widgets safely when split-screen/foldable width crosses a
+            # breakpoint. No stale absolute position survives a resize.
+            scanner_header.clear_widgets()
+            scanner_header_primary.clear_widgets()
+            wide = metrics.get("header_mode") == "floating_overlay"
+            if wide:
+                scanner_header.orientation = "horizontal"
+                scanner_header.height = metrics["bubble_h"] + dp(12)
+                source_mode_chip.size_hint_x = None
+                source_mode_chip.width = metrics["source_chip_w"]
+                device_chip.size_hint_x = None
+                device_chip.width = min(dp(238), metrics["usable_w"] * 0.28)
+                scanner_header.add_widget(source_mode_chip)
+                scanner_header.add_widget(scan_stage_chip)
+                scanner_header.add_widget(device_chip)
+            else:
+                scanner_header.orientation = "vertical"
+                scanner_header.height = metrics["bubble_h"] * 2 + metrics["gap"] + dp(12)
+                source_mode_chip.size_hint_x = None
+                source_mode_chip.width = metrics["source_chip_w"]
+                device_chip.size_hint_x = 1
+                scanner_header_primary.add_widget(source_mode_chip)
+                scanner_header_primary.add_widget(device_chip)
+                scanner_header.add_widget(scanner_header_primary)
+                scanner_header.add_widget(scan_stage_chip)
+
+        configure_scanner_header()
         scanner_fullscreen_layout.add_widget(scanner_header)
 
         scanner_stage = FloatLayout(size_hint=(1, 1))
         scanner_fullscreen_layout.add_widget(scanner_stage)
 
+        scanner_surface = Image(
+            source=ui_asset("scanner_surface_v120.webp"),
+            allow_stretch=True,
+            keep_ratio=False,
+            opacity=0.42,
+            size_hint=(1, 1),
+        )
+        try:
+            if hasattr(scanner_surface, "fit_mode"):
+                scanner_surface.fit_mode = "cover"
+        except Exception:
+            pass
+        scanner_stage.add_widget(scanner_surface)
+
         camera_holder = SurfaceBox(
             orientation="vertical",
             size_hint=(1, 1),
             padding=dp(3),
-            bg_color=(0.008, 0.012, 0.022, 1),
+            bg_color=(0.008, 0.012, 0.022, 0.78),
             border_color=tuple(list(GOLD[:3]) + [0.42]),
             radius=dp(24),
             elevation=1,
@@ -9604,9 +10133,11 @@ class YuGiOhApp(App):
         auto_scan_result_panel.add_widget(result_info)
 
         result_actions = BoxLayout(orientation="vertical", size_hint=(None, 1), width=dp(58 if metrics["compact"] else 64), spacing=dp(8))
-        accept_btn = DarkButton(text="+", bg=SUCCESS, bold=True, radius=dp(18), size_hint=(1, 0.5))
-        reject_btn = DarkButton(text="−", bg=DANGER, bold=True, radius=dp(18), size_hint=(1, 0.5))
+        accept_btn = DarkButton(text="+", bg=SUCCESS, bold=True, radius=dp(18), size_hint=(1, 0.34))
+        alternative_btn = DarkButton(text="1/1", bg=ACCENT_2, bold=True, radius=dp(18), size_hint=(1, 0.32))
+        reject_btn = DarkButton(text="−", bg=DANGER, bold=True, radius=dp(18), size_hint=(1, 0.34))
         result_actions.add_widget(accept_btn)
+        result_actions.add_widget(alternative_btn)
         result_actions.add_widget(reject_btn)
         auto_scan_result_panel.add_widget(result_actions)
         result_anchor = AnchorLayout(anchor_x="left", anchor_y="bottom", padding=metrics["pad"], size_hint=(1, 1))
@@ -9626,7 +10157,12 @@ class YuGiOhApp(App):
             disabled=True,
         )
         source_menu_overlay.add_widget(source_menu_scrim)
-        source_menu_anchor = AnchorLayout(anchor_x="right", anchor_y="bottom", padding=metrics["pad"], size_hint=(1, 1))
+        source_menu_anchor = AnchorLayout(
+            anchor_x="left" if metrics["menu_mode"] == "fan" else "right",
+            anchor_y="bottom",
+            padding=metrics["pad"],
+            size_hint=(1, 1),
+        )
         source_menu_stack = GridLayout(
             cols=1,
             size_hint=(None, None),
@@ -9637,44 +10173,43 @@ class YuGiOhApp(App):
         source_menu_anchor.add_widget(source_menu_stack)
         source_menu_overlay.add_widget(source_menu_anchor)
         scanner_stage.add_widget(source_menu_overlay)
-        source_menu_live_bubble = DarkButton(
-            text="Live",
-            bg=ACCENT_2,
-            radius=dp(24),
+        source_menu_live_bubble = ScannerSourceTile(
+            "scan", "Live", "Serienerkennung",
+            active=True,
+            accent=SUCCESS,
             size_hint=(None, None),
             width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
             height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
-        source_menu_camera_bubble = DarkButton(
-            text="Kamera",
-            bg=ACCENT,
-            radius=dp(24),
+        source_menu_camera_bubble = ScannerSourceTile(
+            "camera", "Kamera", "Foto aufnehmen",
+            active=True,
+            accent=ACCENT,
             size_hint=(None, None),
             width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
             height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
-        source_menu_gallery_bubble = DarkButton(
-            text="Galerie",
-            bg=GOLD,
-            radius=dp(24),
+        source_menu_gallery_bubble = ScannerSourceTile(
+            "gallery", "Galerie", "Bild auswählen",
+            active=True,
+            accent=GOLD,
             size_hint=(None, None),
             width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
             height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
-        bubble_source_menu = DarkButton(
-            text="Quellen",
-            bg=tuple(list(ACCENT[:3]) + [1]),
-            radius=dp(26),
+        bubble_source_menu = ScannerSourceTile(
+            "more", "Quellen", "Live, Kamera, Galerie",
+            active=True,
+            accent=ACCENT,
             size_hint=(None, None),
             width=metrics["source_bubble_w"],
             height=metrics["bubble_h"],
-            bold=True,
         )
         # Reihenfolge: Live/Kamera oben bzw. links, der Quellen-Schalter unten
         # rechts. Im geschlossenen Zustand besitzen nur dessen Zelle und Größe.
@@ -9722,13 +10257,19 @@ class YuGiOhApp(App):
             already_have = collection_count_for(self.collection, collection_preview)
             result_title.text = f"[b]{html_escape(short_text(title, 38))}[/b]"
             result_meta.text = f"{html_escape(display_card_type(card.get('type', '')))} • {html_escape(set_code)}"
-            detail_line = f"{html_escape(rarity)} • {html_escape(language)} • {confidence} % Treffer"
+            evidence_kinds = []
+            for evidence in list((best or {}).get("evidence") or [])[:4]:
+                kind = str((evidence or {}).get("kind") or "").strip()
+                if kind and kind not in evidence_kinds:
+                    evidence_kinds.append(kind)
+            evidence_label = " + ".join(evidence_kinds[:2]) or str((best or {}).get("confidence_reason") or "Datenabgleich")
+            detail_line = f"{html_escape(rarity)} • {html_escape(language)} • {confidence} %\n{html_escape(short_text(evidence_label, 42))}"
             if quality:
-                detail_line += f"\nBildqualität: {int(quality.get('score') or 0)} • In Sammlung: {already_have}"
+                detail_line += f" • Bild {int(quality.get('score') or 0)} • Bestand {already_have}"
             else:
-                detail_line += f"\nIn Sammlung: {already_have}"
+                detail_line += f" • Bestand {already_have}"
             result_detail.text = detail_line
-            image_url = get_image_url(card)
+            image_url = get_thumbnail_url(card)
             result_thumb.source = image_url or ""
             try:
                 result_thumb.reload()
@@ -9736,6 +10277,10 @@ class YuGiOhApp(App):
                 pass
             auto_scan_result_panel.opacity = 1
             auto_scan_result_panel.disabled = False
+            cycle = list(scan_state.get("candidate_cycle") or [best])
+            position = max(0, int(scan_state.get("alternative_index") or 0))
+            alternative_btn.text = f"{position + 1}/{max(1, len(cycle))}"
+            alternative_btn.disabled = len(cycle) <= 1
             set_stage_state(f"Treffer: {title}", SUCCESS)
 
         def hide_result_panel(reset_text=True):
@@ -10075,7 +10620,7 @@ class YuGiOhApp(App):
                 else:
                     bubble.width = metrics["source_bubble_w"]
                     bubble.height = metrics["bubble_h"] if open_state else 0
-                # Opacity zuerst setzen: DarkButton respektiert seit v11.3.0
+                # Opacity zuerst setzen: DarkButton respektiert seit v12.0.0
                 # explizit unsichtbare deaktivierte Overlay-Elemente.
                 bubble.opacity = 1 if open_state else 0
                 bubble.disabled = not open_state
@@ -10090,7 +10635,10 @@ class YuGiOhApp(App):
                 source_menu_stack.height = metrics["bubble_h"] * (4 if open_state else 1) + metrics["gap"] * (3 if open_state else 0)
             source_menu_scrim.opacity = 1 if open_state else 0
             source_menu_scrim.disabled = not open_state
-            bubble_source_menu.text = "Schließen" if open_state else "Quellen"
+            bubble_source_menu.set_label(
+                "Schließen" if open_state else "Quellen",
+                "Menü einklappen" if open_state else "Live, Kamera, Galerie",
+            )
             return open_state
 
         self._toggle_scanner_source_bubbles = toggle_source_bubbles
@@ -10391,6 +10939,9 @@ class YuGiOhApp(App):
                     if best:
                         scan_state["result"] = best
                         scan_state["alternatives"] = alternatives or []
+                        scan_state["quality"] = quality_holder.get("value")
+                        scan_state["candidate_cycle"] = [best] + list(alternatives or [])
+                        scan_state["alternative_index"] = 0
                         show_result_panel(best, quality=quality_holder.get("value"))
                     else:
                         scan_state["result"] = None
@@ -10433,6 +10984,21 @@ class YuGiOhApp(App):
                 def launch_ocr(*_):
                     if token != scan_state.get("token") or getattr(self, "_current_section", "") != "scanner":
                         return
+                    quality = quality_holder.get("value") or {}
+                    brightness = float(quality.get("brightness") or 0)
+                    sharpness = float(quality.get("sharpness") or 0)
+                    contrast = float(quality.get("contrast") or 0)
+                    if quality:
+                        if brightness and brightness < 72:
+                            set_stage_state("Zu dunkel – Licht oder Kamera nutzen", GOLD)
+                        elif brightness > 225:
+                            set_stage_state("Blendung vermeiden – Karte leicht neigen", GOLD)
+                        elif sharpness and sharpness < 8.5:
+                            set_stage_state("Ruhig halten – Fokus wird geprüft", GOLD)
+                        elif contrast and contrast < 24:
+                            set_stage_state("Karte näher und kontrastreicher ausrichten", GOLD)
+                        else:
+                            set_stage_state("Bild stabil – Karte wird abgeglichen", SUCCESS)
                     self.smart_ocr_scan_image(
                         path,
                         after_ocr,
@@ -10451,12 +11017,33 @@ class YuGiOhApp(App):
             if not card:
                 return
             set_item = best.get("set_item") or {}
+            accept_key = "%s|%s" % (
+                str(get_card_id(card) or card.get("name") or ""),
+                str(set_item.get("set_code") or set_item.get("code") or ""),
+            )
+            accepted_at = time.monotonic()
+            if (
+                bool(getattr(self, "series_scan_enabled", True))
+                and accept_key
+                and accept_key == scan_state.get("last_accept_key")
+                and accepted_at - float(scan_state.get("last_accept_at") or 0.0) < 3.5
+            ):
+                hide_result_panel(reset_text=False)
+                scan_state["result"] = None
+                set_stage_state("Diese Karte wurde in der Serie bereits erfasst", GOLD)
+                schedule_auto_scan(0.8)
+                return
             self.add_card(card, set_item=set_item, ask_set=False)
+            scan_state["last_accept_key"] = accept_key
+            scan_state["last_accept_at"] = accepted_at
+            scan_state["session_count"] = int(scan_state.get("session_count") or 0) + 1
+            android_haptic_feedback(28)
             name = str(card.get("name") or "Karte")
             hide_result_panel(reset_text=False)
             scan_state["result"] = None
             scan_state["alternatives"] = []
-            set_stage_state(f"{name} hinzugefügt", SUCCESS)
+            scan_state["candidate_cycle"] = []
+            set_stage_state(f"Serie {scan_state['session_count']} • {name} hinzugefügt", SUCCESS)
             schedule_auto_scan(0.65)
 
         def reject_current_result(*_):
@@ -10466,7 +11053,17 @@ class YuGiOhApp(App):
             set_stage_state("Treffer verworfen – neuer Versuch", ACCENT)
             schedule_auto_scan(0.35)
 
+        def cycle_current_result(*_):
+            cycle = list(scan_state.get("candidate_cycle") or [])
+            if len(cycle) <= 1:
+                return
+            next_index = (int(scan_state.get("alternative_index") or 0) + 1) % len(cycle)
+            scan_state["alternative_index"] = next_index
+            scan_state["result"] = cycle[next_index]
+            show_result_panel(cycle[next_index], quality=scan_state.get("quality"))
+
         accept_btn.bind(on_release=accept_current_result)
+        alternative_btn.bind(on_release=cycle_current_result)
         reject_btn.bind(on_release=reject_current_result)
 
         popup = self.make_inline_page("scanner", content, back_to="search")
@@ -10478,7 +11075,6 @@ class YuGiOhApp(App):
             content.padding = metrics["pad"]
             content.spacing = metrics["gap"]
             scanner_fullscreen_layout.spacing = metrics["gap"]
-            scanner_header.height = metrics["bubble_h"] * 2 + metrics["gap"] + dp(12)
             scanner_header.spacing = metrics["gap"]
             scanner_header_primary.height = metrics["bubble_h"]
             scanner_header_primary.spacing = metrics["gap"]
@@ -10486,10 +11082,12 @@ class YuGiOhApp(App):
             source_mode_chip.height = metrics["bubble_h"]
             device_chip.height = metrics["bubble_h"]
             scan_stage_chip.height = metrics["bubble_h"]
+            configure_scanner_header()
             auto_scan_result_panel.width = metrics["result_w"]
             auto_scan_result_panel.height = metrics["result_h"]
             result_anchor.padding = metrics["pad"]
             source_menu_anchor.padding = metrics["pad"]
+            source_menu_anchor.anchor_x = "left" if metrics["menu_mode"] == "fan" else "right"
             bubble_source_menu.width = metrics["source_bubble_w"]
             bubble_source_menu.height = metrics["bubble_h"]
             thumb_h = max(dp(76), metrics["result_h"] - dp(16))
@@ -10563,12 +11161,21 @@ class YuGiOhApp(App):
                 f"Live/Kamera verwenden jetzt: {label}.\n\nGalerieimporte laufen automatisch im gründlichen Präzisionsmodus.",
             )
 
+    def toggle_series_scan_v120(self, *_):
+        self.series_scan_enabled = not bool(getattr(self, "series_scan_enabled", True))
+        self.save_settings()
+        state = "aktiv" if self.series_scan_enabled else "deaktiviert"
+        self.show_info(
+            "Scanner-Serienmodus",
+            f"Serienmodus ist jetzt {state}.\n\nIm aktiven Modus wird derselbe Treffer kurzzeitig entprellt; unterschiedliche Karten können ohne erneutes Öffnen des Scanners nacheinander erfasst werden.",
+        )
+
     def open_scan_timing_popup(self, *_):
         """Zeigt Zielzeiten und reale Messwerte dieses Geräts pro Modus."""
         lines = [
             "Scanner-Zeiten pro einzelner Kartenfläche",
             "",
-            "KI-Ensemble v11.3.0: " + model_stack_summary(),
+            "KI-Ensemble v12.0.0: " + model_stack_summary(),
             "",
             "Die Zielwerte gelten bei installierter lokaler Kartendatenbank. ",
             "Große/unscharfe Bilder und der erste Modellstart können länger dauern.",
@@ -10938,7 +11545,7 @@ class YuGiOhApp(App):
         return output
 
     def detect_card_regions(self, path, max_cards=64):
-        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v11.3.0.
+        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v12.0.0.
 
         YOLO, MediaPipe, native/Python-OpenCV und der bisherige Pillow-Pfad
         stimmen gemeinsam über jede Kartenfläche ab. Die Resultate werden per
@@ -13635,7 +14242,7 @@ class YuGiOhApp(App):
         results = list(results or [])
         errors = list(errors or [])
 
-        # v11.3.0: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
+        # v12.0.0: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
         # Galerie-Import bleibt als eigenständiger Prüfeintrag mit genau seinem
         # Vorschaubild, Scan-Crop, Artwork und seinen Kandidaten erhalten.
         grouped_results = []
@@ -14287,7 +14894,7 @@ class YuGiOhApp(App):
                         existing_results.append(result)
                     Clock.schedule_once(lambda *_: (popup.dismiss(), self.show_bulk_gallery_review_popup(existing_results, existing_errors)), 0)
                 except Exception as exc:
-                    Clock.schedule_once(lambda *_: setattr(status, "text", f"Suche fehlgeschlagen: {exc}"), 0)
+                    Clock.schedule_once(lambda *_, _message=str(exc): setattr(status, "text", f"Suche fehlgeschlagen: {_message}"), 0)
 
             threading.Thread(target=worker, daemon=True).start()
 
@@ -14611,7 +15218,14 @@ class YuGiOhApp(App):
         )
         body.add_widget(progress)
 
-        footer = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(52), spacing=dp(8))
+        footer = GridLayout(
+            cols=1 if phone_layout else 3,
+            size_hint_y=None,
+            height=dp(164 if phone_layout else 52),
+            spacing=dp(8),
+            row_default_height=dp(52),
+            row_force_default=True,
+        )
         sync_btn = DarkButton(
             text="Jetzt synchronisieren",
             bg=SUCCESS,
@@ -14619,7 +15233,11 @@ class YuGiOhApp(App):
             no_wrap=True,
             font_size=ui_font_px(13, profile),
         )
+        delta_btn = DarkButton(text="Offline-Delta importieren", bg=ACCENT_2, no_wrap=True)
+        rollback_btn = DarkButton(text="Letztes Delta zurück", bg=GOLD, no_wrap=True)
         footer.add_widget(sync_btn)
+        footer.add_widget(delta_btn)
+        footer.add_widget(rollback_btn)
         wrapper.add_widget(footer)
 
         popup = self.make_popup("", wrapper, size_hint=(0.96 if phone_layout else 0.82, 0.92 if phone_layout else 0.82))
@@ -14639,8 +15257,117 @@ class YuGiOhApp(App):
             )
 
         sync_btn.bind(on_release=start_sync)
+        delta_btn.bind(on_release=lambda *_: self.open_delta_pack_import_v120(lang_code, status))
+        rollback_btn.bind(on_release=lambda *_: self.rollback_last_data_pack_v120(status))
         close_top.bind(on_release=popup.dismiss)
         popup.open()
+
+    def open_delta_pack_import_v120(self, language_code="de", status_label=None):
+        def accept_path(raw_path):
+            try:
+                path = str(raw_path or "")
+                if path.startswith("content://") and platform == "android":
+                    path = copy_android_content_uri_to_file(path, self.user_data_dir, "database_delta")
+                if not path or not os.path.exists(path) or os.path.getsize(path) <= 0:
+                    raise ValueError("Die Delta-Datei konnte nicht gelesen werden.")
+                if os.path.getsize(path) > 64 * 1024 * 1024:
+                    raise ValueError("Das Delta-Paket überschreitet 64 MB.")
+            except Exception as exc:
+                self.show_error("Delta-Paket", str(exc))
+                return
+
+            self.set_status("Offline-Delta wird geprüft und atomar angewendet …")
+
+            def worker():
+                try:
+                    with open(path, "r", encoding="utf-8") as handle:
+                        pack = json.load(handle)
+                    meta = validate_pack(pack)
+                    lang = str(meta.get("language") or language_code or "de")
+                    cards = load_local_card_database(lang)
+                    updated, rollback = apply_delta_pack(cards, pack)
+                    self.app_db.register_data_pack(
+                        meta["pack_id"],
+                        meta.get("target_version") or "unknown",
+                        meta["checksum"],
+                        rollback,
+                    )
+                    try:
+                        db_path = save_local_card_database(updated, lang, meta={
+                            "primary_source": "Just InCard Offline Delta",
+                            "pack_id": meta["pack_id"],
+                            "target_version": meta.get("target_version"),
+                        })
+                    except Exception:
+                        self.app_db.remove_data_pack(meta["pack_id"])
+                        raise
+                    def done(*_):
+                        if status_label is not None:
+                            status_label.text = local_database_status_text(lang)
+                        self.set_status(f"Offline-Delta {meta['pack_id']} installiert.")
+                        self.show_info("Delta installiert", f"{meta['operations']} Änderung(en) geprüft und angewendet.\n\n{db_path}")
+                    Clock.schedule_once(done, 0)
+                except Exception as exc:
+                    Clock.schedule_once(lambda *_, _message=str(exc): self.show_error("Delta-Paket abgelehnt", _message), 0)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        try:
+            from plyer import filechooser
+            def selected(selection):
+                value = selection[0] if isinstance(selection, (list, tuple)) and selection else (selection or "")
+                if hasattr(value, "toString"):
+                    value = str(value.toString())
+                Clock.schedule_once(lambda *_: accept_path(value), 0)
+            try:
+                filechooser.open_file(on_selection=selected, filters=[("Just InCard Delta", "*.jicpack", "*.json")])
+            except TypeError:
+                filechooser.open_file(on_selection=selected)
+        except Exception as exc:
+            self.show_error("Dateiauswahl", str(exc))
+
+    def rollback_last_data_pack_v120(self, status_label=None):
+        try:
+            if bool(getattr(self, "_delta_rollback_running_v120", False)):
+                self.set_status("Ein Delta-Rollback läuft bereits.")
+                return
+            pack = self.app_db.latest_data_pack()
+            if not pack:
+                self.show_info("Kein Delta", "Es ist kein installiertes Offline-Delta zum Zurücksetzen vorhanden.")
+                return
+            self._delta_rollback_running_v120 = True
+            self.set_status(f"Delta {pack.get('pack_id')} wird im Hintergrund zurückgesetzt …")
+
+            def worker():
+                try:
+                    rollback = pack.get("rollback") or {}
+                    lang = str(rollback.get("language") or "de")
+                    cards = load_local_card_database(lang)
+                    restored = rollback_delta_pack(cards, rollback)
+                    path = save_local_card_database(restored, lang, meta={
+                        "primary_source": "Just InCard Delta-Rollback",
+                        "rolled_back_pack": pack.get("pack_id"),
+                    })
+                    self.app_db.remove_data_pack(str(pack.get("pack_id") or ""))
+
+                    def done(*_):
+                        self._delta_rollback_running_v120 = False
+                        if status_label is not None:
+                            status_label.text = local_database_status_text(lang)
+                        self.set_status(f"Delta {pack.get('pack_id')} wurde zurückgesetzt.")
+                        self.show_info("Delta zurückgesetzt", f"Der vorherige Datenbestand wurde wiederhergestellt.\n\n{path}")
+
+                    Clock.schedule_once(done, 0)
+                except Exception as exc:
+                    def failed(*_, _exc=exc):
+                        self._delta_rollback_running_v120 = False
+                        self.show_error("Rollback fehlgeschlagen", str(_exc))
+                    Clock.schedule_once(failed, 0)
+
+            threading.Thread(target=worker, daemon=True).start()
+        except Exception as exc:
+            self._delta_rollback_running_v120 = False
+            self.show_error("Rollback fehlgeschlagen", str(exc))
 
     def start_database_sync(self, language_code="de", progress_label=None, status_label=None, popup=None, sync_options=None):
         self.set_status("Lokale Kartendatenbank wird synchronisiert...")
@@ -14678,7 +15405,7 @@ class YuGiOhApp(App):
                 pass
             Clock.schedule_once(lambda *_: self._finish_database_sync(len(cards), path, None, status_label), 0)
         except Exception as exc:
-            Clock.schedule_once(lambda *_: self._finish_database_sync(0, "", str(exc), status_label), 0)
+            Clock.schedule_once(lambda *_, _message=str(exc): self._finish_database_sync(0, "", _message, status_label), 0)
 
     def _filter_synced_database_cards(self, cards, sync_options):
         """Filtert die lokale Datenbank nach den im Datenbank-Popup gewählten Optionen.
@@ -14764,7 +15491,8 @@ class YuGiOhApp(App):
             "• Galerieimporte laufen immer im gründlichen Präzisionsmodus; eine Schnell-/Normal-Auswahl gibt es dort nicht mehr.\n"
             "• Galerie-Gründlich erkennt mehrere Karten, korrigiert Perspektive, prüft verschiedene Schriftfarben und gleicht bei Unsicherheit Effekt und Artwork ab.\n"
             "• Für beste OCR-Qualität nutze Galerie oder ein hochauflösendes Foto.\n"
-            "• Priorität beim Lesen: Set-Kürzel + Kartennummer, danach Name, danach Passcode.\n"
+            "• Priorität beim Lesen: Set-Kürzel + Kartennummer, danach exakter Passcode, erst danach der Kartenname.\n"
+            "• Live-Serienmodus wartet auf stabile Bilder, blockiert direkte Duplikate und gibt Hinweise zu Licht, Fokus und Bewegung.\n"
             "• Treffer zeigen Sicherheit, Bildqualität, Alternativen und genaue Fehlergründe.\n"
             "• Vor dem Hinzufügen können Karte, Set/Rarity, Artwork, Sprache, Menge und Auswahl korrigiert werden.\n"
             "• Scan-Historie, Fehler erneut scannen und letzter Import rückgängig sind enthalten.\n"
@@ -14776,19 +15504,22 @@ class YuGiOhApp(App):
             "• Verschiedene Artworks werden als eigene Varianten geführt.\n"
             "• Backup ZIP sichert Sammlung, Decks, Einstellungen, eigene Karten, Datenbank und Bilder.\n\n"
             "[b][size=18]6. Deckbuilder[/size][/b]\n"
-            "• Bis zu 10 Decks aus deiner Sammlung.\n"
+            f"• Bis zu {MAX_DECKS} Decks aus deiner Sammlung.\n"
             "• Die App verhindert, dass du mehr Kopien nutzt als du besitzt.\n"
             "• + und - ändern Mengen direkt, Löschen entfernt Einträge komplett.\n"
-            "• Decks können als Text exportiert werden.\n"
+            "• Decks können als Text und .ydk exportiert, aus .ydk importiert und als kompakter QR-/Teilcode weitergegeben werden.\n"
+            "• TCG-, OCG-, GOAT- und Speed-Duel-Prüfung kontrolliert Zonen, Kopien und eingebettete Banlist-Angaben.\n"
             "• KI-Deckhilfe funktioniert mit API-Key; ohne Key gibt es lokale Hinweise.\n\n"
             "[b][size=18]7. Lokale Datenbank[/size][/b]\n"
             "• Synchronisierung macht Suche schneller und stabiler.\n"
             "• Du kannst entscheiden, ob doppelte Karten, Platzhalter, Karten ohne Bild oder ohne Set übernommen werden.\n"
             "• Ab v8.1 wird zusätzlich eine SQLite-Spiegeldatenbank angelegt, um spätere große Datenmengen besser zu verwalten.\n"
+            "• Prüfsummenvalidierte Offline-Delta-Pakete aktualisieren Teilbestände und können auf den vorherigen Stand zurückgesetzt werden.\n"
             "• Reparatur entfernt beschädigte/ungültige Einträge und schreibt JSON + SQLite neu.\n\n"
             "[b][size=18]8. Export, Backup und Wiederherstellung[/size][/b]\n"
             "• XLSX-Export für Google Sheets.\n"
             "• Backup als ZIP für Sammlung, Decks, Einstellungen, eigene Karten, Bilder und lokale Datenbank.\n"
+            "• Auf Android ist zusätzlich ein gerätegebundenes AES-GCM-Backup über den Android Keystore verfügbar.\n"
             "• Fehlerbericht als TXT für Support.\n\n"
             "[b][size=18]9. Themes & Barrierefreiheit[/size][/b]\n"
             "• Dark Theme, Light Theme und Farbenblind-Modus.\n"
@@ -14799,11 +15530,10 @@ class YuGiOhApp(App):
             "• Scanner erkennt nichts: helleres Bild, weniger Spiegelung, Karte gerade ausrichten, Foto/Galerie statt Live nutzen.\n"
             "• GitHub Build Fehler: Docker-Buildozer-Workflow nutzen.\n"
             "• App verhält sich langsam: lokale Datenbank reparieren oder Backup erstellen und App-Daten bereinigen.\n\n"
-            "[b][size=18]Was noch sinnvoll wäre[/size][/b]\n"
-            "• Datenschutz-/Impressumstext, falls die App öffentlich geteilt wird.\n"
-            "• Support-Link oder GitHub-Issue-Link.\n"
-            "• Changelog im App-Menü.\n"
-            "• Cloud-Sync, Preislisten und native CameraX-Kamera in einer späteren großen Version.\n\n"
+            "[b][size=18]11. Datenschutz und Sicherheit[/size][/b]\n"
+            "• API-Schlüssel liegen auf Android verschlüsselt im Android Keystore und werden nicht in Diagnose- oder Backup-Dateien geschrieben.\n"
+            "• Wunsch-/Tauschlisten, Preisverlauf und Sammlung bleiben lokal, solange keine ausdrücklich gewählte Online-Funktion genutzt wird.\n"
+            "• CameraX, Galerie und Dateidialoge geben ihre Ressourcen beim Schließen frei.\n\n"
             f"Copyright: {APP_COPYRIGHT}"
         )
         self.show_scroll_text("Hilfe, Anleitung & Support", info_text)
@@ -14856,6 +15586,11 @@ class YuGiOhApp(App):
 
     def open_collection_dashboard(self, *_):
         summary = CollectionAnalyticsV93.summarize(self.collection)
+        try:
+            flag_map = self.app_db.all_collection_flags()
+        except Exception:
+            flag_map = {}
+        market = collection_market_summary(self.collection, flag_map)
         wrapper = SurfaceBox(orientation="vertical", padding=dp(10), spacing=dp(8), bg_color=PANEL_BG)
         header = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(8))
         header.add_widget(DarkLabel(text=f"[b]Sammlungs-Dashboard[/b]\n[color={markup_hex(MUTED)}]Übersicht über Karten, Sets, Artworks und Datenqualität.[/color]", markup=True))
@@ -14871,6 +15606,9 @@ class YuGiOhApp(App):
             ("Doppelte Exemplare", summary["duplicates"]),
             ("Ohne Set", summary["without_set"]),
             ("Ohne Bild", summary["without_image"]),
+            ("Schätzwert EUR", f"{market.get('estimated_value', 0):.2f}"),
+            ("Wunschliste", market.get("wishlist_items", 0)),
+            ("Tausch-Exemplare", market.get("trade_copies", 0)),
         ]
         rows = math.ceil(len(values) / stats.cols)
         stats.height = dp(rows * 82 + max(0, rows - 1) * 8)
@@ -14885,11 +15623,15 @@ class YuGiOhApp(App):
             body.add_widget(DarkLabel(text="[b]Häufigste Rarities[/b]", markup=True, size_hint_y=None, height=dp(30)))
             for rarity, count in summary["top_rarities"]:
                 body.add_widget(DarkLabel(text=f"{html_escape(rarity)}: {count}", size_hint_y=None, height=dp(28)))
-        actions = GridLayout(cols=1 if self.ui_width_below(560) else 2, spacing=dp(8), size_hint_y=None, height=dp(50))
+        actions = GridLayout(cols=2 if self.ui_width_below(560) else 4, spacing=dp(8), size_hint_y=None, height=dp(104 if self.ui_width_below(560) else 50), row_default_height=dp(48), row_force_default=True)
         set_btn = DarkButton(text="Set-Fortschritt", bg=GOLD)
         collection_btn = DarkButton(text="Sammlung öffnen", bg=ACCENT_2)
+        wishlist_btn = DarkButton(text="Wunschliste", bg=ACCENT)
+        trade_btn = DarkButton(text="Tauschliste", bg=SUCCESS)
         actions.add_widget(set_btn)
         actions.add_widget(collection_btn)
+        actions.add_widget(wishlist_btn)
+        actions.add_widget(trade_btn)
         body.add_widget(actions)
         scroll = ScrollView(bar_width=dp(6), scroll_type=["bars", "content"], do_scroll_x=False)
         scroll.add_widget(body)
@@ -14898,7 +15640,33 @@ class YuGiOhApp(App):
         close_top.bind(on_release=popup.dismiss)
         set_btn.bind(on_release=lambda *_: (popup.dismiss(), self.open_set_progress_popup()))
         collection_btn.bind(on_release=lambda *_: (popup.dismiss(), self.open_collection_popup()))
+        wishlist_btn.bind(on_release=lambda *_: (popup.dismiss(), self.open_collection_flag_list_v120("wishlist")))
+        trade_btn.bind(on_release=lambda *_: (popup.dismiss(), self.open_collection_flag_list_v120("trade")))
         popup.open()
+
+    def open_collection_flag_list_v120(self, kind="wishlist"):
+        kind = "trade" if str(kind) == "trade" else "wishlist"
+        try:
+            flags = self.app_db.all_collection_flags(**{kind: True})
+        except Exception:
+            flags = {}
+        title = "Tauschliste" if kind == "trade" else "Wunschliste"
+        lines = [title, ""]
+        matches = 0
+        for key, flag in flags.items():
+            entry = self.collection.get(key) or {}
+            card = entry.get("card") if isinstance(entry, dict) else {}
+            if not card and kind == "wishlist":
+                name = flag.get("note") or key
+            else:
+                name = card.get("name") or key
+            amount = int(entry.get("count", 0) or 0) if isinstance(entry, dict) else 0
+            desired = int(flag.get("desired_count", 0) or 0)
+            lines.append(f"• {name} • Bestand {amount}" + (f" • gesucht {desired}" if desired else ""))
+            matches += 1
+        if not matches:
+            lines.append("Noch keine Karten markiert. Öffne eine Karte in der Sammlung und wähle dort Wunsch- oder Tauschliste.")
+        self.show_scroll_text(title, "\n".join(lines))
 
     def open_set_progress_popup(self, *_):
         content = SurfaceBox(orientation="vertical", padding=dp(10), spacing=dp(8), bg_color=PANEL_BG)
@@ -14959,10 +15727,12 @@ class YuGiOhApp(App):
                             + (f" • Fehlend: {row.get('missing', 0)}" if total else "")
                         ), markup=True))
                         grid.add_widget(card)
-                progress_filter.bind(text=lambda *_: render())
-                Clock.schedule_once(render, 0)
+                def install_render(*_):
+                    progress_filter.bind(text=lambda *_args: render())
+                    render()
+                Clock.schedule_once(install_render, 0)
             except Exception as exc:
-                Clock.schedule_once(lambda *_: setattr(status, "text", f"Auswertung fehlgeschlagen: {exc}"), 0)
+                Clock.schedule_once(lambda *_, _message=str(exc): setattr(status, "text", f"Auswertung fehlgeschlagen: {_message}"), 0)
         threading.Thread(target=worker, daemon=True).start()
 
     def export_set_progress_report(self, rows):
@@ -15162,13 +15932,16 @@ class YuGiOhApp(App):
         popup = self.make_popup("", wrapper, size_hint=(0.96, 0.90))
         close_top.bind(on_release=popup.dismiss)
         popup.open()
+        profile_snapshot = dict(self.current_ui_profile())
+        scanner_mode_snapshot = str(self.scan_mode)
+        performance_title_snapshot = str(self.resolved_performance_mode().title)
 
         def worker():
             runner = DiagnosticsRunnerV93(os.path.dirname(os.path.abspath(__file__)), self.user_data_dir, self.app_database_file)
             tests = runner.run()
-            profile = self.current_ui_profile()
+            profile = profile_snapshot
             tests.append({"name": "UI-Profil", "ok": True, "detail": f"{profile.get('device_class')} / {profile.get('window_class')} • {int(profile.get('width_dp', 0))}×{int(profile.get('height_dp', 0))} dp • {profile.get('layout_mode')}", "severity": "info"})
-            tests.append({"name": "Scanner-Modus", "ok": True, "detail": f"{self.scan_mode} • {self.resolved_performance_mode().title}", "severity": "info"})
+            tests.append({"name": "Scanner-Modus", "ok": True, "detail": f"{scanner_mode_snapshot} • {performance_title_snapshot}", "severity": "info"})
             try:
                 tests.append({"name": "Kamera-Modul", "ok": Camera is not None, "detail": "Kivy Camera verfügbar" if Camera is not None else "Kivy Camera nicht verfügbar; Android-Fallback wird genutzt", "severity": "warning"})
             except Exception:
@@ -15219,6 +15992,12 @@ class YuGiOhApp(App):
             return
         entry = self.collection[key]
         metadata = normalized_collection_metadata(entry.get("metadata") or {})
+        try:
+            collection_flags = self.app_db.get_collection_flags(key)
+            price_points = self.app_db.recent_prices(key, 90)
+        except Exception:
+            collection_flags = {"wishlist": False, "trade": False, "desired_count": 0, "note": ""}
+            price_points = []
         wrapper = SurfaceBox(orientation="vertical", spacing=dp(8), padding=dp(10), bg_color=PANEL_BG)
         wrapper.add_widget(DarkLabel(
             text=f"[b]Sammlungsdetails[/b]\n[color={markup_hex(MUTED)}]{html_escape(card.get('name', 'Karte'))} • {html_escape(artwork_label(card))}[/color]",
@@ -15234,14 +16013,44 @@ class YuGiOhApp(App):
         storage = DarkInput(text=metadata["storage_location"], hint_text="Lagerort, z. B. Ordner 1 – Seite 14", size_hint_y=None, height=dp(50))
         purchase_date = DarkInput(text=metadata["purchase_date"], hint_text="Kaufdatum", size_hint_y=None, height=dp(50))
         purchase_price = DarkInput(text=metadata["purchase_price"], hint_text="Kaufpreis (optional)", size_hint_y=None, height=dp(50))
+        api_market_price = ""
+        try:
+            prices = card.get("card_prices") if isinstance(card.get("card_prices"), list) else []
+            api_market_price = (prices[0] or {}).get("cardmarket_price", "") if prices and isinstance(prices[0], dict) else ""
+            if float(str(api_market_price or "0").replace(",", ".")) <= 0:
+                api_market_price = ""
+        except Exception:
+            api_market_price = ""
+        latest_price = price_points[-1].get("price") if price_points else (entry.get("metadata") or {}).get("market_price", api_market_price)
+        market_price = DarkInput(text=str(latest_price or ""), hint_text="Aktueller Marktwert EUR", size_hint_y=None, height=dp(50))
+        desired_count = DarkInput(text=str(collection_flags.get("desired_count") or ""), hint_text="Gewünschte Anzahl", input_filter="int", size_hint_y=None, height=dp(50))
         note = DarkInput(text=metadata["note"], hint_text="Notiz", multiline=True, size_hint_y=None, height=dp(110))
-        for widget in (condition, language, edition, storage, purchase_date, purchase_price, note):
+        for widget in (condition, language, edition, storage, purchase_date, purchase_price, market_price, desired_count, note):
             grid.add_widget(widget)
-        wrapper.add_widget(grid)
-        actions = GridLayout(cols=1 if self.ui_width_below(480) else 2, size_hint_y=None, height=dp(100 if self.ui_width_below(480) else 48), spacing=dp(8))
+        form_content = BoxLayout(orientation="vertical", size_hint_y=None, spacing=dp(8))
+        form_content.bind(minimum_height=form_content.setter("height"))
+        form_content.add_widget(grid)
+        flag_row = GridLayout(cols=1 if self.ui_width_below(520) else 2, size_hint_y=None, height=dp(104 if self.ui_width_below(520) else 50), spacing=dp(8))
+        wishlist_box = SurfaceBox(orientation="horizontal", spacing=dp(8), padding=(dp(10), dp(4)), bg_color=INPUT_BG, radius=dp(16))
+        wishlist_check = CheckBox(active=bool(collection_flags.get("wishlist")), size_hint_x=None, width=dp(44), color=ACCENT)
+        wishlist_box.add_widget(wishlist_check)
+        wishlist_box.add_widget(DarkLabel(text="Wunschliste", color=TEXT))
+        trade_box = SurfaceBox(orientation="horizontal", spacing=dp(8), padding=(dp(10), dp(4)), bg_color=INPUT_BG, radius=dp(16))
+        trade_check = CheckBox(active=bool(collection_flags.get("trade")), size_hint_x=None, width=dp(44), color=GOLD)
+        trade_box.add_widget(trade_check)
+        trade_box.add_widget(DarkLabel(text="Tauschliste", color=TEXT))
+        flag_row.add_widget(wishlist_box)
+        flag_row.add_widget(trade_box)
+        form_content.add_widget(flag_row)
+        form_scroll = ScrollView(bar_width=dp(6), scroll_type=["bars", "content"])
+        form_scroll.add_widget(form_content)
+        wrapper.add_widget(form_scroll)
+        actions = GridLayout(cols=1 if self.ui_width_below(520) else 3, size_hint_y=None, height=dp(156 if self.ui_width_below(520) else 48), spacing=dp(8))
         save_btn = DarkButton(text="Details speichern", bg=SUCCESS)
+        price_btn = DarkButton(text="Preisverlauf", bg=ACCENT_2)
         cancel_btn = DarkButton(text="Abbrechen", bg=INPUT_BG_2)
         actions.add_widget(save_btn)
+        actions.add_widget(price_btn)
         actions.add_widget(cancel_btn)
         wrapper.add_widget(actions)
         popup = self.make_popup("Sammlungsdetails", wrapper, size_hint=(0.94, 0.86))
@@ -15258,6 +16067,24 @@ class YuGiOhApp(App):
                     "note": note.text.strip(),
                     "last_updated": time.time(),
                 })
+                price_value = str(market_price.text or "").strip().replace(",", ".")
+                if price_value:
+                    parsed_price = max(0.0, float(price_value))
+                    new_meta["market_price"] = round(parsed_price, 2)
+                    price_source = "Manuell"
+                    try:
+                        if api_market_price and abs(parsed_price - float(str(api_market_price).replace(",", "."))) < 0.001:
+                            price_source = "YGOPRODeck/Cardmarket"
+                    except Exception:
+                        pass
+                    self.app_db.add_price_point(key, parsed_price, source=price_source, currency="EUR")
+                self.app_db.set_collection_flags(
+                    key,
+                    wishlist=bool(wishlist_check.active),
+                    trade=bool(trade_check.active),
+                    desired_count=max(0, int(desired_count.text or 0)),
+                    note=note.text.strip(),
+                )
                 self.collection[key]["metadata"] = new_meta
                 self.save_collection(show_popup=False)
                 popup.dismiss()
@@ -15266,8 +16093,32 @@ class YuGiOhApp(App):
                 self.show_error("Sammlungsdetails", str(exc))
 
         save_btn.bind(on_release=save_details)
+        price_btn.bind(on_release=lambda *_: self.open_price_history_v120(key, card))
         cancel_btn.bind(on_release=popup.dismiss)
         popup.open()
+
+    def open_price_history_v120(self, collection_key, card=None):
+        try:
+            points = self.app_db.recent_prices(collection_key, 366)
+        except Exception:
+            points = []
+        trend = price_trend(points)
+        trend_label = {"up": "steigend", "down": "fallend", "stable": "stabil", "unknown": "unbekannt"}.get(
+            str(trend.get("direction") or "unknown"),
+            "unbekannt",
+        )
+        lines = [
+            f"Preisverlauf: {(card or {}).get('name', 'Karte')}",
+            "",
+            f"Messpunkte: {len(points)}",
+            f"Aktuell: {trend.get('latest') if trend.get('latest') is not None else '-'} EUR",
+            f"Trend: {trend_label} ({trend.get('change_percent', 0)} %)",
+            "",
+        ]
+        for point in points[-120:]:
+            stamp = time.strftime("%d.%m.%Y", time.localtime(float(point.get("observed_at") or 0)))
+            lines.append(f"{stamp}: {float(point.get('price') or 0):.2f} {point.get('currency', 'EUR')} • {point.get('source', '')}")
+        self.show_scroll_text("Preisverlauf", "\n".join(lines))
 
     def open_duplicate_variant_center(self, *_):
         groups = find_duplicate_variant_groups(self.collection)
@@ -15621,6 +16472,7 @@ class YuGiOhApp(App):
         section("Scanner", "Live/Kamera-Modus, Galerie-Präzisionsscan, Lernfunktion und Historie", [
             ("Scanmodus: Schnell", ACCENT_2, lambda *_: self.set_scan_mode("schnell"), True),
             ("Scanmodus: Normal", ACCENT_2, lambda *_: self.set_scan_mode("normal"), True),
+            ("Serienmodus umschalten", ACCENT_2, lambda *_: self.toggle_series_scan_v120(), True),
             ("Galerie: immer gründlich", ACCENT_2, lambda *_: self.show_info("Galerie-Präzisionsscan", "Galeriebilder werden automatisch gründlich mit Farbkanal-, Effekt- und Artwork-Abgleich verarbeitet."), True),
             ("Scanner-Zeiten", ACCENT_2, lambda *_: self.open_scan_timing_popup(), True),
             ("Scanner-Lernfunktion", ACCENT_2, lambda *_: self.open_scan_learning_popup(), True),
@@ -15640,6 +16492,8 @@ class YuGiOhApp(App):
             ("Sammlung laden", ACCENT_2, lambda *_: self.load_collection(show_popup=True), True),
             ("Backup ZIP erstellen", ACCENT_2, lambda *_: self.export_backup_zip(), True),
             ("Backup ZIP wiederherstellen", ACCENT_2, lambda *_: self.import_backup_zip(), True),
+            ("Gerätebackup verschlüsseln", SUCCESS, lambda *_: self.export_device_encrypted_backup_v120(), True),
+            ("Gerätebackup entschlüsseln", GOLD, lambda *_: self.import_device_encrypted_backup_v120(), True),
             ("Automatische Backups", ACCENT_2, lambda *_: self.open_automatic_backups_popup(), True),
             ("App-Zustand speichern", ACCENT_2, lambda *_: self.save_session_state(show_popup=True), True),
             ("App-Zustand zurücksetzen", DANGER, lambda *_: self.clear_session_state(), True),
@@ -15811,13 +16665,20 @@ class YuGiOhApp(App):
 
     def export_backup_zip(self, *_):
         """Erstellt ein konsistentes ZIP-Backup der wichtigen Nutzerdaten."""
+        encrypt_requested = bool(getattr(self, "_device_backup_request_v120", False))
+        self._device_backup_request_v120 = False
+        if encrypt_requested and platform != "android":
+            self.show_error("Gerätebackup", "Die gerätegebundene Keystore-Verschlüsselung ist nur auf Android verfügbar.")
+            return
         try:
             self.save_collection(show_popup=False, immediate=True)
             self.save_decks(immediate=True)
             self.save_settings()
             self.save_scan_history()
             self.save_session_state(show_popup=False)
-            folder = self._writable_export_dir()
+            if getattr(self, "app_db", None) is not None:
+                self.app_db.checkpoint()
+            folder = self.user_data_dir if encrypt_requested else self._writable_export_dir()
             stamp = str(time.time_ns())
             output = os.path.join(folder, f"{BACKUP_PREFIX}_{stamp}.zip")
             candidates = [
@@ -15862,10 +16723,49 @@ class YuGiOhApp(App):
                             added += 1
                     except Exception:
                         continue
-            self.show_info("Backup erstellt", f"{added} Datendateien wurden gesichert:\n{output}")
+            if encrypt_requested:
+                encrypted = os.path.join(self._writable_export_dir(), f"{BACKUP_PREFIX}_{stamp}.jicbak")
+                if not android_device_backup_crypt(output, encrypted, decrypt=False):
+                    raise RuntimeError("Android Keystore konnte das Backup nicht verschlüsseln.")
+                try:
+                    os.remove(output)
+                except Exception:
+                    pass
+                self.present_export_file(encrypted, "application/octet-stream", "Verschlüsseltes Gerätebackup erstellt")
+            else:
+                self.show_info("Backup erstellt", f"{added} Datendateien wurden gesichert:\n{output}")
         except Exception as exc:
             self.append_crash_log(exc, "Backup ZIP")
             self.show_error("Backup fehlgeschlagen", str(exc))
+
+    def export_device_encrypted_backup_v120(self, *_):
+        """Create an AES-GCM backup readable only with this Android device key."""
+        self._device_backup_request_v120 = True
+        self.export_backup_zip()
+
+    def import_device_encrypted_backup_v120(self, *_):
+        if platform != "android":
+            self.show_error("Gerätebackup", "Die gerätegebundene Keystore-Wiederherstellung ist nur auf Android verfügbar.")
+            return
+        import_dir = os.path.join(self.user_data_dir, "imports")
+        os.makedirs(import_dir, exist_ok=True)
+
+        def decrypt_backup(path):
+            target = os.path.join(import_dir, f"device_backup_{time.time_ns()}.zip")
+            if not android_device_backup_crypt(path, target, decrypt=True):
+                self.show_error("Gerätebackup", "Backup konnte nicht entschlüsselt werden. Es gehört möglicherweise zu einem anderen Gerät oder Android-Schlüssel.")
+                return
+            self._accept_backup_import(target)
+
+        started = start_android_document_picker(
+            import_dir,
+            "application/octet-stream",
+            "device_backup_import",
+            lambda path: Clock.schedule_once(lambda *_: decrypt_backup(path), 0),
+            lambda message: Clock.schedule_once(lambda *_: self.set_status(message), 0),
+        )
+        if not started:
+            self.show_error("Gerätebackup", "Android-Dateiauswahl konnte nicht gestartet werden.")
 
     def repair_database(self, *_):
         """Repariert alle vorhandenen Sprachdatenbanken in einem Hintergrund-Thread."""

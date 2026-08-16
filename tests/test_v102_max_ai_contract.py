@@ -14,7 +14,7 @@ def run():
         rank_scan_items, build_preview_map,
     )
     from deck_ai_v102 import build_deck_suggestions, zone
-    assert APP_VERSION=='11.3.0' and APP_BUILD==1130
+    assert APP_VERSION=='12.0.0' and APP_BUILD==1200
     ids={x['id'] for x in AI_MODEL_STACK_V102}
     for required in ('mediapipe_detector','litert_image_embedder','mlkit_latin','mlkit_japanese','mlkit_korean','mlkit_chinese','paddleocr','tesseract','openai_vision'):
         assert required in ids, required
@@ -53,10 +53,10 @@ def run():
     assert 'org.tensorflow:tensorflow-lite-task-vision' not in spec
     workflow=(ROOT/'.github/workflows/build-android-apk.yml').read_text(encoding='utf-8')
     assert 'tests/test_v102_max_ai_contract.py' in workflow
-    assert 'just-incard-v1130-arm64-api35-ndk25b' in workflow
+    assert 'just-incard-v1200-arm64-api35-ndk27c' in workflow
     manifest=json.loads((ROOT/'models/ai_models_manifest.json').read_text(encoding='utf-8'))
-    assert manifest['version']=='11.3.0'
-    assert sorted(p.name for p in ROOT.glob('*.txt'))==['CHANGELOG_v11_3_0.txt']
-    print('v11.3.0 maximum AI scanner/deck/artwork contract tests: OK')
+    assert manifest['version']=='12.0.0'
+    assert sorted(p.name for p in ROOT.glob('*.txt'))==['CHANGELOG_v12_0_0.txt']
+    print('v12.0.0 maximum AI scanner/deck/artwork contract tests: OK')
 
 if __name__=='__main__': run()

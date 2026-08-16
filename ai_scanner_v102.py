@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Maximaler KI-Scanner-Orchestrator für Just InCard v11.3.0.
+"""Maximaler KI-Scanner-Orchestrator für Just InCard v12.0.0.
 
 Kivy-unabhängig: Modellregister, Sprach-/Kartentypabdeckung, Artwork-Identität,
 Batch-Vorschauschutz und Ensemble-Bewertung.

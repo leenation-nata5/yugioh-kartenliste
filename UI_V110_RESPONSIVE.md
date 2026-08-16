@@ -1,4 +1,4 @@
-# Just InCard v11.3.0 – Responsive UI
+# Just InCard v12.0.0 – Responsive UI
 
 ## Ziel
 

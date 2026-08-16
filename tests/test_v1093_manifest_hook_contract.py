@@ -16,8 +16,8 @@ ANDROID_NS = "http://schemas.android.com/apk/res/android"
 
 def run():
     from app_version import APP_VERSION, APP_BUILD
-    assert APP_VERSION == "11.3.0"
-    assert APP_BUILD == 1130
+    assert APP_VERSION == "12.0.0"
+    assert APP_BUILD == 1200
 
     spec_text = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
     assert "p4a.hook = p4a_manifest_hook.py" in spec_text
@@ -69,8 +69,8 @@ def run():
     assert "manifest_hook_report.json" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_3_0.txt"], txt_files
-    print("v11.3.0 manifest hook/Gradle build contract tests: OK")
+    assert txt_files == ["CHANGELOG_v12_0_0.txt"], txt_files
+    print("v12.0.0 manifest hook/Gradle build contract tests: OK")
 
 
 if __name__ == "__main__":

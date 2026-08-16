@@ -1,4 +1,4 @@
-name: Build Android APKs
+name: Build Android APKs und optionales AAB
 
 on:
   workflow_dispatch:
@@ -13,6 +13,11 @@ on:
         required: false
         type: boolean
         default: true
+      build_aab:
+        description: "Zusätzlich ein signiertes Android App Bundle für Google Play bauen"
+        required: false
+        type: boolean
+        default: false
       publish_release:
         description: "APKs zusätzlich als GitHub Release veröffentlichen"
         required: false
@@ -45,7 +50,9 @@ jobs:
     timeout-minutes: 240
 
     env:
-      BUILDOZER_IMAGE: kivy/buildozer:latest
+      # Offizielles linux/amd64-Manifest vom 20.07.2026, absichtlich per Digest
+      # fixiert. Ein Update erfolgt bewusst zusammen mit Preflight/Smoke-Tests.
+      BUILDOZER_IMAGE: kivy/buildozer@sha256:27e67ef7983b5603f79cb956796d8227e24ddaf6d63c265664fad54bf58f5b7b
       BUILDOZER_HOME: ${{ github.workspace }}/.buildozer_home
       BUILDOZER_WARN_ON_ROOT: "0"
 
@@ -67,12 +74,14 @@ jobs:
           APP_BUILD="$(python3 -c 'from app_version import APP_BUILD; print(APP_BUILD)')"
 
           BUILD_RELEASE="true"
+          BUILD_AAB="false"
           PUBLISH_RELEASE="false"
           CLEAN_SDK_CACHE="false"
           INCLUDE_EXTENDED_AI_MODELS="true"
 
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             BUILD_RELEASE="${{ inputs.build_release }}"
+            BUILD_AAB="${{ inputs.build_aab }}"
             PUBLISH_RELEASE="${{ inputs.publish_release }}"
             CLEAN_SDK_CACHE="${{ inputs.clean_sdk_cache }}"
             INCLUDE_EXTENDED_AI_MODELS="${{ inputs.include_extended_ai_models }}"
@@ -81,6 +90,7 @@ jobs:
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "APP_BUILD=$APP_BUILD" >> "$GITHUB_ENV"
           echo "BUILD_RELEASE=$BUILD_RELEASE" >> "$GITHUB_ENV"
+          echo "BUILD_AAB=$BUILD_AAB" >> "$GITHUB_ENV"
           echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> "$GITHUB_ENV"
           echo "CLEAN_SDK_CACHE=$CLEAN_SDK_CACHE" >> "$GITHUB_ENV"
           echo "INCLUDE_EXTENDED_AI_MODELS=$INCLUDE_EXTENDED_AI_MODELS" >> "$GITHUB_ENV"
@@ -93,6 +103,7 @@ jobs:
             echo "- Build: \`$APP_BUILD\`"
             echo "- Android-ABI: \`arm64-v8a\`"
             echo "- Release-APK: \`$BUILD_RELEASE\`"
+            echo "- Google-Play-AAB: \`$BUILD_AAB\`"
             echo "- Erweiterte KI-Modelle: \`$INCLUDE_EXTENDED_AI_MODELS\`"
             echo "- Programmierer/Admin: \`leenation\`"
             echo "- Schutz: \`Release-Signierung, Integritätsmanifest, private App-Daten, optimierter Python-Release-Build\`"
@@ -166,6 +177,13 @@ jobs:
           python3 tests/test_v1123_repository_overlay_contract.py 2>&1 | tee logs/test_v1123_repository_overlay_contract.log
           python3 tests/test_v1123_p4a_android_wheel_contract.py 2>&1 | tee logs/test_v1123_p4a_android_wheel_contract.log
           python3 tests/test_v113_ui_performance_contract.py 2>&1 | tee logs/test_v113_ui_performance_contract.log
+          python3 tests/test_v120_core_contract.py 2>&1 | tee logs/test_v120_core_contract.log
+          python3 tests/test_v120_responsive_fuzz.py 2>&1 | tee logs/test_v120_responsive_fuzz.log
+          python3 tests/test_v120_android_scanner_contract.py 2>&1 | tee logs/test_v120_android_scanner_contract.log
+          python3 tests/test_v120_release_contract.py 2>&1 | tee logs/test_v120_release_contract.log
+          python3 scripts/scan_benchmark_v120.py tests/fixtures/scan_corpus/manifest.example.json \
+            --min-accuracy 0.90 --max-false-positive-rate 0.02 --max-p95-ms 1000 \
+            --output logs/scan_benchmark_v120.json
 
       - name: Freien Speicher vorbereiten
         shell: bash
@@ -181,9 +199,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer_home
-          key: just-incard-v1130-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
+          key: just-incard-v1200-arm64-api35-ndk27c-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
           restore-keys: |
-            just-incard-v1130-arm64-api35-ndk25b-${{ runner.os }}-
+            just-incard-v1200-arm64-api35-ndk27c-${{ runner.os }}-
 
       - name: Build-Verzeichnisse sauber vorbereiten
         shell: bash
@@ -236,7 +254,7 @@ jobs:
           python3 ci/patch_p4a_android_wheels.py "$P4A_BUILD" \
             | tee logs/p4a_android_wheel_patch.log
 
-          grep -F 'Just InCard Android wheel staging hotfix v11.3.0' "$P4A_BUILD"
+          grep -F 'Just InCard Android wheel staging hotfix v12.0.0' "$P4A_BUILD"
           grep -F -- '--only-binary=:all:' "$P4A_BUILD"
           grep -F 'PyProjectRecipe.get_wheel_platform_tags(arch.arch, ctx)' "$P4A_BUILD"
           grep -F -- '--python-version={2}' "$P4A_BUILD"
@@ -476,7 +494,7 @@ jobs:
           echo "release_source=$RELEASE_SOURCE" >> "$GITHUB_OUTPUT"
 
       - name: Release-Signierung auswählen
-        if: env.BUILD_RELEASE == 'true'
+        if: env.BUILD_RELEASE == 'true' || env.BUILD_AAB == 'true'
         id: signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -589,6 +607,101 @@ jobs:
           retention-days: 21
           compression-level: 0
 
+      - name: Android App Bundle bauen
+        if: env.BUILD_AAB == 'true'
+        id: aab_build
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+
+          rm -f bin/*.aab || true
+          cp buildozer.spec buildozer.spec.apk
+          trap 'mv -f buildozer.spec.apk buildozer.spec' EXIT
+          sed -i 's/^android\.release_artifact = apk$/android.release_artifact = aab/' buildozer.spec
+          grep -Fx 'android.release_artifact = aab' buildozer.spec
+
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+            --env BUILDOZER_WARN_ON_ROOT=0 \
+            --env PYTHONOPTIMIZE=2 \
+            --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}" \
+            "$BUILDOZER_IMAGE" \
+            android release 2>&1 | tee logs/buildozer_aab_full.log
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+          mv -f buildozer.spec.apk buildozer.spec
+          trap - EXIT
+          set -e
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
+
+          if [[ "$BUILD_STATUS" -ne 0 ]]; then
+            tail -n 250 logs/buildozer_aab_full.log || true
+            exit "$BUILD_STATUS"
+          fi
+
+          AAB_SOURCE="$(find bin -type f -name '*.aab' -printf '%T@ %p\n' \
+            | sort -nr | head -n 1 | cut -d' ' -f2-)"
+          test -n "$AAB_SOURCE"
+          test -s "$AAB_SOURCE"
+          echo "aab_source=$AAB_SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Android App Bundle signieren und prüfen
+        if: env.BUILD_AAB == 'true'
+        id: sign_aab
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          AAB_SOURCE="${{ steps.aab_build.outputs.aab_source }}"
+          test -s "$AAB_SOURCE"
+
+          if [[ "$SIGNING_MODE" == "production" ]]; then
+            AAB_NAME="JustInCard-v${APP_VERSION}-release.aab"
+          else
+            AAB_NAME="JustInCard-v${APP_VERSION}-release-test.aab"
+          fi
+          AAB_TARGET="dist/$AAB_NAME"
+          cp "$AAB_SOURCE" "$AAB_TARGET"
+
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --env AAB_PATH="/home/user/hostcwd/$AAB_TARGET" \
+            --env KEYSTORE_PATH="/home/user/hostcwd/$SIGN_KEYSTORE_REL" \
+            --env SIGN_STORE_PASS \
+            --env SIGN_KEY_ALIAS \
+            --env SIGN_KEY_PASS \
+            --entrypoint /bin/bash \
+            "$BUILDOZER_IMAGE" \
+            -lc '
+              set -Eeuo pipefail
+              JARSIGNER="$(command -v jarsigner)"
+              test -x "$JARSIGNER"
+              "$JARSIGNER" \
+                -keystore "$KEYSTORE_PATH" \
+                -storepass "$SIGN_STORE_PASS" \
+                -keypass "$SIGN_KEY_PASS" \
+                -sigalg SHA256withRSA \
+                -digestalg SHA-256 \
+                "$AAB_PATH" "$SIGN_KEY_ALIAS"
+              "$JARSIGNER" -verify -verbose -certs "$AAB_PATH"
+            ' 2>&1 | tee logs/jarsigner_aab.log
+
+          sha256sum "$AAB_TARGET" | tee "${AAB_TARGET}.sha256"
+          echo "aab=$AAB_TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Android App Bundle hochladen
+        if: env.BUILD_AAB == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustInCard-v${{ steps.version.outputs.version }}-Google-Play-AAB
+          path: |
+            dist/JustInCard-v${{ steps.version.outputs.version }}-release*.aab
+            dist/JustInCard-v${{ steps.version.outputs.version }}-release*.aab.sha256
+          if-no-files-found: error
+          retention-days: 21
+          compression-level: 0
+
 
       - name: Security-Metadaten hochladen
         if: always()
@@ -635,7 +748,7 @@ jobs:
           fi
 
           mapfile -t FILES < <(find dist -maxdepth 1 -type f \
-            \( -name '*.apk' -o -name '*.sha256' \) | sort)
+            \( -name '*.apk' -o -name '*.aab' -o -name '*.sha256' \) | sort)
           test "${#FILES[@]}" -ge 2
 
           if gh release view "$TAG" >/dev/null 2>&1; then

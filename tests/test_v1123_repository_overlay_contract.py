@@ -12,8 +12,8 @@ sys.path.insert(0, str(ROOT))
 def run() -> None:
     from app_version import APP_BUILD, APP_VERSION
 
-    assert APP_VERSION == "11.3.0"
-    assert APP_BUILD == 1130
+    assert APP_VERSION == "12.0.0"
+    assert APP_BUILD == 1200
 
     preflight = (ROOT / "preflight_check.py").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
@@ -23,7 +23,7 @@ def run() -> None:
         "def cleanup_stale_release_files()",
         'ROOT.glob("CHANGELOG_v*.txt")',
         "path.unlink()",
-        'expected = "CHANGELOG_v11_3_0.txt"',
+        'expected = "CHANGELOG_v12_0_0.txt"',
         "cleanup_stale_release_files()",
     ):
         assert fragment in preflight, fragment
@@ -40,8 +40,8 @@ def run() -> None:
     ):
         assert fragment in workflow, fragment
 
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_3_0.txt"]
-    print("v11.3.0 repository overlay/upload cleanup contract tests: OK")
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_0.txt"]
+    print("v12.0.0 repository overlay/upload cleanup contract tests: OK")
 
 
 if __name__ == "__main__":

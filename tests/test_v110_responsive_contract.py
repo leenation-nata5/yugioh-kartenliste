@@ -97,7 +97,7 @@ def run() -> None:
         json.dumps(report, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"v11.3.0 responsive matrix: {len(devices)} device profiles OK")
+    print(f"v12.0.0 responsive matrix: {len(devices)} device profiles OK")
 
 
 if __name__ == "__main__":

@@ -19,8 +19,8 @@ def run():
         strict_set_code_equal,
     )
 
-    assert APP_VERSION == "11.3.0"
-    assert APP_BUILD == 1130
+    assert APP_VERSION == "12.0.0"
+    assert APP_BUILD == 1200
 
     assert strict_set_code_equal("FOTB-DE043", "FOTB-DE043")
     assert not strict_set_code_equal("SDWD-DE001", "FOTB-DE043")
@@ -85,12 +85,12 @@ def run():
 
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
-    assert re.search(r"^version\s*=\s*11\.3\.0\s*$", spec, re.M)
+    assert re.search(r"^version\s*=\s*12\.0\.0\s*$", spec, re.M)
     assert "tests/test_v108_strict_scanner_contract.py" in workflow
-    assert "just-incard-v1130-arm64-api35-ndk25b" in workflow
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_3_0.txt"]
+    assert "just-incard-v1200-arm64-api35-ndk27c" in workflow
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_0.txt"]
 
-    print("v11.3.0 strict multilingual scanner contract tests: OK")
+    print("v12.0.0 strict multilingual scanner contract tests: OK")
 
 
 if __name__ == "__main__":
