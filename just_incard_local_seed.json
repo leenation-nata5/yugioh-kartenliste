@@ -1,0 +1,74 @@
+{
+  "version": "4.4",
+  "note": "Kleine lokale Seed-Datei. Vollständige Daten werden über den Datenbank-Sync aus den Quellen geladen.",
+  "sources": [
+    "YGOPRODeck API v7",
+    "YGOResources",
+    "RockRoller/Yugipedia",
+    "YGOJSON",
+    "Project Ignis/BabelCDB",
+    "Just InCard lokale Seed-Daten"
+  ],
+  "cards": [
+    {
+      "id": 46986414,
+      "name": "Dark Magician",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Normal Monster",
+      "race": "Spellcaster",
+      "attribute": "DARK",
+      "atk": 2500,
+      "def": 2100
+    },
+    {
+      "id": 89631139,
+      "name": "Blue-Eyes White Dragon",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Normal Monster",
+      "race": "Dragon",
+      "attribute": "LIGHT",
+      "atk": 3000,
+      "def": 2500
+    },
+    {
+      "id": 74677422,
+      "name": "Red-Eyes Black Dragon",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Normal Monster",
+      "race": "Dragon",
+      "attribute": "DARK",
+      "atk": 2400,
+      "def": 2000
+    },
+    {
+      "id": 10000000,
+      "name": "Obelisk the Tormentor",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Effect Monster",
+      "race": "Divine-Beast",
+      "attribute": "DIVINE",
+      "atk": 4000,
+      "def": 4000
+    },
+    {
+      "id": 10000010,
+      "name": "Slifer the Sky Dragon",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Effect Monster",
+      "race": "Divine-Beast",
+      "attribute": "DIVINE",
+      "atk": "?",
+      "def": "?"
+    },
+    {
+      "id": 10000020,
+      "name": "The Winged Dragon of Ra",
+      "desc": "Local seed entry for offline fallback/search bootstrap.",
+      "type": "Effect Monster",
+      "race": "Divine-Beast",
+      "attribute": "DIVINE",
+      "atk": "?",
+      "def": "?"
+    }
+  ]
+}

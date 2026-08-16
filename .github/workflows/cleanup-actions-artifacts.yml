@@ -1,0 +1,28 @@
+name: Clean GitHub Actions Artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Suche vorhandene Actions-Artefakte..."
+          ids=$(gh api repos/${{ github.repository }}/actions/artifacts --paginate -q '.artifacts[].id')
+          if [ -z "$ids" ]; then
+            echo "Keine Artefakte zum Löschen gefunden."
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Lösche Artifact $id"
+            gh api --method DELETE repos/${{ github.repository }}/actions/artifacts/$id
+          done
+          echo "Fertig. GitHub berechnet den freien Speicher eventuell erst nach 6-12 Stunden neu."

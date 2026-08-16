@@ -1,0 +1,75 @@
+{
+  "version": "4.5",
+  "description": "Just InCard Quellen-Registry. Die App nutzt nur öffentliche/API-nahe Quellen defensiv. Quellen ohne stabile frei nutzbare API werden dokumentiert, aber nicht aggressiv gescraped.",
+  "active_sources": [
+    {
+      "name": "YGOPRODeck API v7",
+      "role": "Hauptquelle fuer Karten, Bilder, Sets, Rarities, Preise; mehrsprachig geladen",
+      "url": "https://db.ygoprodeck.com/api/v7/cardinfo.php",
+      "enabled": true
+    },
+    {
+      "name": "YGOPRODeck Card Sets",
+      "role": "Setnamen/Setcodes/Setanzahl/TCG-Datum",
+      "url": "https://db.ygoprodeck.com/api/v7/cardsets.php",
+      "enabled": true
+    },
+    {
+      "name": "YGOPRODeck Archetypes",
+      "role": "Archetype/Serienindex fuer spaetere Filter",
+      "url": "https://db.ygoprodeck.com/api/v7/archetypes.php",
+      "enabled": true
+    },
+    {
+      "name": "YGOResources",
+      "role": "Mehrsprachige Namen, Karten- und Printcode-Indexe",
+      "url": "https://db.ygoresources.com/about/api",
+      "enabled": true
+    },
+    {
+      "name": "RockRoller/Yugipedia API",
+      "role": "Yugipedia-basierter Karten- und Setdatenbestand",
+      "url": "https://yugioh-api.rockroller.xyz/",
+      "enabled": true
+    },
+    {
+      "name": "YGOJSON",
+      "role": "Cards, Tokens, Skill Cards, Sets, Duel Links/Master Duel, Archetypes, Pack Odds, Sealed Products",
+      "url": "https://github.com/iconmaster5326/YGOJSON",
+      "enabled": true
+    },
+    {
+      "name": "Project Ignis / BabelCDB",
+      "role": "EDOPro-CDBs, OCG/TCG, Skills, Rush, Pre-Release, optionale inoffizielle Karten",
+      "url": "https://github.com/ProjectIgnis/BabelCDB",
+      "enabled": true
+    },
+    {
+      "name": "Yugipedia Cargo API",
+      "role": "Direkter defensiver Zusatz-Fallback fuer Yugipedia-Kartenseiten",
+      "url": "https://yugipedia.com/api.php",
+      "enabled": true
+    },
+    {
+      "name": "Just InCard lokale Seed-Daten",
+      "role": "direkt eingebettete lokale Minimaldaten",
+      "url": "just_incard_local_seed.json",
+      "enabled": true
+    }
+  ],
+  "documented_not_scraped": [
+    {
+      "name": "KONAMI Yu-Gi-Oh! Card Database",
+      "reason": "Offiziell und wichtig, aber keine dokumentierte freie JSON/API fuer Massendownload; nicht aggressiv gescraped."
+    },
+    {
+      "name": "YGOHub",
+      "reason": "Historische API-Dokumentation vorhanden, Verfuegbarkeit/Format nicht stabil genug als Hauptquelle."
+    },
+    {
+      "name": "Duel Links Meta / Master Duel Meta / weitere Webseiten",
+      "reason": "Nuetzlich fuer Deckideen/Meta, aber keine stabile offene Komplettkarten-API fuer lokale App-Syncs."
+    }
+  ],
+  "local_cards": []
+}

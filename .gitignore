@@ -1,0 +1,13 @@
+.buildozer/
+.buildozer_home/
+bin/
+logs/
+__pycache__/
+*.py[cod]
+*.apk
+*.aab
+.idea/
+.vscode/
+.DS_Store
+dist/
+ci/active-release.keystore

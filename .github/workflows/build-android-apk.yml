@@ -1,0 +1,607 @@
+name: Build Android APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      clean_sdk_cache:
+        description: "SDK-/NDK-Cache vor dem Build vollständig leeren"
+        required: false
+        type: boolean
+        default: false
+      build_release:
+        description: "Zusätzlich eine Release-APK bauen"
+        required: false
+        type: boolean
+        default: true
+      publish_release:
+        description: "APKs zusätzlich als GitHub Release veröffentlichen"
+        required: false
+        type: boolean
+        default: false
+      include_extended_ai_models:
+        description: "Optionale YOLO-, PaddleOCR- und MiniLM-Modelle vorbereiten"
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "v*"
+
+concurrency:
+  group: just-incard-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    name: Debug- und Release-APK bauen
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+
+    env:
+      BUILDOZER_IMAGE: kivy/buildozer:latest
+      BUILDOZER_HOME: ${{ github.workspace }}/.buildozer_home
+      BUILDOZER_WARN_ON_ROOT: "0"
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Version und Buildoptionen vorbereiten
+        id: version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          test -f main.py
+          test -f app_version.py
+          test -f buildozer.spec
+
+          APP_VERSION="$(python3 -c 'from app_version import APP_VERSION; print(APP_VERSION)')"
+          APP_BUILD="$(python3 -c 'from app_version import APP_BUILD; print(APP_BUILD)')"
+
+          BUILD_RELEASE="true"
+          PUBLISH_RELEASE="false"
+          CLEAN_SDK_CACHE="false"
+          INCLUDE_EXTENDED_AI_MODELS="true"
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            BUILD_RELEASE="${{ inputs.build_release }}"
+            PUBLISH_RELEASE="${{ inputs.publish_release }}"
+            CLEAN_SDK_CACHE="${{ inputs.clean_sdk_cache }}"
+            INCLUDE_EXTENDED_AI_MODELS="${{ inputs.include_extended_ai_models }}"
+          fi
+
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "APP_BUILD=$APP_BUILD" >> "$GITHUB_ENV"
+          echo "BUILD_RELEASE=$BUILD_RELEASE" >> "$GITHUB_ENV"
+          echo "PUBLISH_RELEASE=$PUBLISH_RELEASE" >> "$GITHUB_ENV"
+          echo "CLEAN_SDK_CACHE=$CLEAN_SDK_CACHE" >> "$GITHUB_ENV"
+          echo "INCLUDE_EXTENDED_AI_MODELS=$INCLUDE_EXTENDED_AI_MODELS" >> "$GITHUB_ENV"
+          echo "version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$APP_BUILD" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Just InCard v$APP_VERSION"
+            echo
+            echo "- Build: \`$APP_BUILD\`"
+            echo "- Android-ABI: \`arm64-v8a\`"
+            echo "- Release-APK: \`$BUILD_RELEASE\`"
+            echo "- Erweiterte KI-Modelle: \`$INCLUDE_EXTENDED_AI_MODELS\`"
+            echo "- Programmierer/Admin: \`leenation\`"
+            echo "- Schutz: \`Release-Signierung, Integritätsmanifest, private App-Daten, optimierter Python-Release-Build\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Python-Prüfwerkzeuge vorbereiten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m pip install --user --disable-pip-version-check Pillow
+
+      - name: KI-Modellpakete vorbereiten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p logs models
+
+          python3 prepare_ai_models_v109.py 2>&1 | tee logs/ai_models_core.log
+
+          if [[ "$INCLUDE_EXTENDED_AI_MODELS" == "true" ]]; then
+            set +e
+            python3 prepare_ai_models_v109.py --extended 2>&1 | tee logs/ai_models_extended.log
+            MODEL_STATUS=${PIPESTATUS[0]}
+            set -e
+            if [[ "$MODEL_STATUS" -ne 0 ]]; then
+              echo "Optionale KI-Modelle konnten nicht vollständig vorbereitet werden; stabiler Core-Build wird fortgesetzt."
+            fi
+          else
+            echo "Erweiterte KI-Modelle wurden für diesen Lauf deaktiviert." | tee logs/ai_models_extended.log
+          fi
+
+      - name: Projekt vor dem Android-Build prüfen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p logs dist bin "$BUILDOZER_HOME"
+
+          python3 prepare_release_hardening.py 2>&1 | tee logs/security_hardening.log
+          python3 preflight_check.py 2>&1 | tee logs/preflight_console.log
+          python3 tests/test_v93_core.py 2>&1 | tee logs/test_v93_core.log
+          python3 tests/test_v96_ui_contract.py 2>&1 | tee logs/test_v96_ui_contract.log
+          python3 tests/test_v97_core.py 2>&1 | tee logs/test_v97_core.log
+          python3 tests/test_v97_ui_contract.py 2>&1 | tee logs/test_v97_ui_contract.log
+          python3 tests/test_v100_scanner_contract.py 2>&1 | tee logs/test_v100_scanner_contract.log
+          python3 tests/test_v101_ai_scanner_contract.py 2>&1 | tee logs/test_v101_ai_scanner_contract.log
+          python3 tests/test_v102_max_ai_contract.py 2>&1 | tee logs/test_v102_max_ai_contract.log
+          python3 tests/test_v104_features_contract.py 2>&1 | tee logs/test_v104_features_contract.log
+          python3 tests/test_v105_branding_contract.py 2>&1 | tee logs/test_v105_branding_contract.log
+          python3 tests/test_v107_isolated_gallery_contract.py 2>&1 | tee logs/test_v107_isolated_gallery_contract.log
+          python3 tests/test_v108_strict_scanner_contract.py 2>&1 | tee logs/test_v108_strict_scanner_contract.log
+          python3 tests/test_v1081_startup_transition_contract.py 2>&1 | tee logs/test_v1081_startup_transition_contract.log
+          python3 tests/test_v109_multiengine_ai_contract.py 2>&1 | tee logs/test_v109_multiengine_ai_contract.log
+          python3 tests/test_v1091_gallery_multiengine_contract.py 2>&1 | tee logs/test_v1091_gallery_multiengine_contract.log
+          python3 tests/test_v1092_gradle_build_contract.py 2>&1 | tee logs/test_v1092_gradle_build_contract.log
+          python3 tests/test_v1093_manifest_hook_contract.py 2>&1 | tee logs/test_v1093_manifest_hook_contract.log
+          python3 tests/test_v110_responsive_contract.py 2>&1 | tee logs/test_v110_responsive_contract.log
+          python3 tests/test_v110_ui_contract.py 2>&1 | tee logs/test_v110_ui_contract.log
+          python3 tests/test_v1101_java_hotfix_contract.py 2>&1 | tee logs/test_v1101_java_hotfix_contract.log
+          python3 tests/test_v1102_gradle_memory_contract.py 2>&1 | tee logs/test_v1102_gradle_memory_contract.log
+          python3 tests/test_v112_scanner_ui_contract.py 2>&1 | tee logs/test_v112_scanner_ui_contract.log
+
+      - name: Freien Speicher vorbereiten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get clean || true
+          docker system prune --all --force || true
+          df -h
+
+      - name: Buildozer-SDK-Cache wiederherstellen
+        uses: actions/cache@v4
+        with:
+          path: .buildozer_home
+          key: just-incard-v112-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
+          restore-keys: |
+            just-incard-v112-arm64-api35-ndk25b-${{ runner.os }}-
+
+      - name: Build-Verzeichnisse sauber vorbereiten
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # Der lokale p4a-/pip-Venv darf niemals aus einem vorherigen ABI- oder
+          # Workflow-Durchlauf übernommen werden.
+          rm -rf .buildozer bin dist
+          mkdir -p .buildozer_home bin dist logs ci
+
+          if [[ "$CLEAN_SDK_CACHE" == "true" ]]; then
+            echo "Vollständiger SDK-/NDK-Clean-Build angefordert."
+            rm -rf .buildozer_home
+            mkdir -p .buildozer_home
+          fi
+
+      - name: Buildozer-Docker-Image laden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker pull "$BUILDOZER_IMAGE"
+          docker image inspect "$BUILDOZER_IMAGE" --format '{{json .RepoDigests}}' \
+            | tee logs/buildozer_image_digest.log
+
+      - name: Debug-APK mit Buildozer bauen
+        id: debug_build
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+
+          {
+            echo "=== GitHub Runner Speicher vor Android-Build ==="
+            free -h || true
+            echo
+            echo "=== Docker-Informationen ==="
+            docker info --format 'Docker CPUs={{.NCPU}} TotalMemory={{.MemTotal}}' || true
+          } | tee logs/runner_memory_before_build.log
+
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+            --env BUILDOZER_WARN_ON_ROOT=0 \
+            "$BUILDOZER_IMAGE" \
+            android debug 2>&1 \
+            | tee logs/buildozer_debug_full.log \
+            | awk '
+                /\[INFO\]/ || /\[WARNING\]/ || /\[ERROR\]/ ||
+                /Traceback/ || /ImportError/ || /Command failed/ ||
+                /Buildozer failed/ || /Execution failed/ || /What went wrong/ ||
+                /Could not resolve/ || /Duplicate/ || /2 files found/ ||
+                /DexArchiveMergerException/ || /Program type already present/ ||
+                /Java heap space/ || /A failure occurred/ ||
+                /APK/ || /BUILD SUCCESS/ || /BUILD FAILED/ {
+                  print; fflush()
+                }
+              '
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
+
+          grep -nEi \
+            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|ImportError|Traceback|No space left|Killed' \
+            logs/buildozer_debug_full.log \
+            | tail -n 400 > logs/buildozer_debug_errors.log || true
+
+          if [[ "$BUILD_STATUS" -ne 0 ]]; then
+            {
+              echo "### Debug-Build fehlgeschlagen"
+              echo
+              echo "Buildozer Exit-Code: \`$BUILD_STATUS\`"
+              echo
+              echo '<details><summary>Fehlerauszug</summary>'
+              echo
+              echo '```text'
+              tail -n 120 logs/buildozer_debug_errors.log || true
+              echo '```'
+              echo '</details>'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "Die letzten 250 Logzeilen:"
+            tail -n 250 logs/buildozer_debug_full.log || true
+
+            DIST_DIR="$GITHUB_WORKSPACE/.buildozer/android/platform/build-arm64-v8a/dists/yugiohkartenliste"
+            if [[ -f "$DIST_DIR/gradle.properties" ]]; then
+              echo "Wirksame gradle.properties:"
+              cat "$DIST_DIR/gradle.properties" | tee logs/gradle_properties_effective.log
+            fi
+            if [[ -x "$DIST_DIR/gradlew" ]]; then
+              echo "Gradle wird einmal mit --stacktrace erneut ausgeführt, um die eigentliche Ursache sichtbar zu machen."
+              set +e
+              docker run --rm \
+                --entrypoint /bin/bash \
+                --volume "$PWD":/home/user/hostcwd \
+                --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+                "$BUILDOZER_IMAGE" -lc \
+                "cd /home/user/hostcwd/.buildozer/android/platform/build-arm64-v8a/dists/yugiohkartenliste && ./gradlew assembleDebug --stacktrace --info --no-daemon" \
+                2>&1 | tee logs/gradle_debug_stacktrace.log
+              set -e
+              awk '
+                /FAILURE: Build failed with an exception/ { capture=1 }
+                capture { print }
+                capture && /BUILD FAILED/ { exit }
+              ' logs/gradle_debug_stacktrace.log > logs/gradle_failure_section.log || true
+
+              grep -nEi 'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing' \
+                logs/gradle_debug_stacktrace.log | tail -n 400 > logs/gradle_debug_errors.log || true
+              echo "Gradle-Fehlerauszug:"
+              if [[ -s logs/gradle_failure_section.log ]]; then
+                tail -n 500 logs/gradle_failure_section.log
+              else
+                cat logs/gradle_debug_errors.log || true
+              fi
+            fi
+            exit "$BUILD_STATUS"
+          fi
+
+          DEBUG_SOURCE="$(find bin -type f -name '*.apk' -printf '%T@ %p\n' \
+            | sort -nr | head -n 1 | cut -d' ' -f2-)"
+
+          if [[ -z "$DEBUG_SOURCE" || ! -s "$DEBUG_SOURCE" ]]; then
+            echo "Fehler: Buildozer meldete Erfolg, aber keine Debug-APK wurde gefunden."
+            find bin -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          DEBUG_TARGET="dist/JustInCard-v${APP_VERSION}-debug.apk"
+          cp "$DEBUG_SOURCE" "$DEBUG_TARGET"
+          sha256sum "$DEBUG_TARGET" | tee "${DEBUG_TARGET}.sha256"
+          echo "debug_apk=$DEBUG_TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: AndroidManifest-Hook-Bericht prüfen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -s logs/manifest_hook_report.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("logs/manifest_hook_report.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if data.get("ok") is not True:
+              raise SystemExit("Manifest-Hook meldet Fehler: " + str(data))
+          if data.get("final_activity_count") != 1:
+              raise SystemExit("CameraX-Aktivität wurde nicht genau einmal eingetragen")
+          print("Manifest-Hook OK:", data.get("manifest"))
+          PY
+
+      - name: Debug-APK prüfen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 apk_validate.py \
+            "${{ steps.debug_build.outputs.debug_apk }}" \
+            --version "$APP_VERSION" \
+            --report-dir logs/debug
+
+          {
+            echo "### Debug-APK erfolgreich"
+            echo
+            echo "- Datei: \`${{ steps.debug_build.outputs.debug_apk }}\`"
+            echo "- Größe: \`$(du -h '${{ steps.debug_build.outputs.debug_apk }}' | cut -f1)\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Debug-APK hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustInCard-v${{ steps.version.outputs.version }}-Debug-APK
+          path: |
+            dist/JustInCard-v${{ steps.version.outputs.version }}-debug.apk
+            dist/JustInCard-v${{ steps.version.outputs.version }}-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 21
+          compression-level: 0
+
+      - name: Release-Build vorbereiten
+        if: env.BUILD_RELEASE == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
+          rm -f bin/*.apk bin/*.aab || true
+
+          # Zusätzlicher Schutz gegen den im v9.7-Log gefundenen gemischten pip-Venv.
+          find .buildozer -type d -path '*/build/venv' -prune -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Release-APK mit Buildozer bauen
+        if: env.BUILD_RELEASE == 'true'
+        id: release_build
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+            --env BUILDOZER_WARN_ON_ROOT=0 \
+            --env PYTHONOPTIMIZE=2 \
+            --env SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}" \
+            "$BUILDOZER_IMAGE" \
+            android release 2>&1 \
+            | tee logs/buildozer_release_full.log \
+            | awk '
+                /\[INFO\]/ || /\[WARNING\]/ || /\[ERROR\]/ ||
+                /Traceback/ || /ImportError/ || /Command failed/ ||
+                /Buildozer failed/ || /Execution failed/ || /What went wrong/ ||
+                /Could not resolve/ || /Duplicate/ || /2 files found/ ||
+                /DexArchiveMergerException/ || /Program type already present/ ||
+                /Java heap space/ || /A failure occurred/ ||
+                /APK/ || /BUILD SUCCESS/ || /BUILD FAILED/ {
+                  print; fflush()
+                }
+              '
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+          set -e
+
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
+
+          grep -nEi \
+            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|ImportError|Traceback|No space left|Killed' \
+            logs/buildozer_release_full.log \
+            | tail -n 400 > logs/buildozer_release_errors.log || true
+
+          if [[ "$BUILD_STATUS" -ne 0 ]]; then
+            {
+              echo "### Release-Build fehlgeschlagen"
+              echo
+              echo "Die Debug-APK wurde bereits als Artefakt gespeichert."
+              echo
+              echo '<details><summary>Fehlerauszug</summary>'
+              echo
+              echo '```text'
+              tail -n 120 logs/buildozer_release_errors.log || true
+              echo '```'
+              echo '</details>'
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            tail -n 250 logs/buildozer_release_full.log || true
+            exit "$BUILD_STATUS"
+          fi
+
+          RELEASE_SOURCE="$(find bin -type f -name '*.apk' -printf '%T@ %p\n' \
+            | sort -nr | head -n 1 | cut -d' ' -f2-)"
+
+          if [[ -z "$RELEASE_SOURCE" || ! -s "$RELEASE_SOURCE" ]]; then
+            echo "Fehler: Release-Build erfolgreich, aber keine APK gefunden."
+            find bin -maxdepth 3 -type f -print || true
+            exit 1
+          fi
+
+          echo "release_source=$RELEASE_SOURCE" >> "$GITHUB_OUTPUT"
+
+      - name: Release-Signierung auswählen
+        if: env.BUILD_RELEASE == 'true'
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && \
+                -n "$ANDROID_KEYSTORE_PASSWORD" && \
+                -n "$ANDROID_KEY_ALIAS" && \
+                -n "$ANDROID_KEY_PASSWORD" ]]; then
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > ci/active-release.keystore
+            echo "SIGNING_MODE=production" >> "$GITHUB_ENV"
+            echo "SIGN_KEYSTORE_REL=ci/active-release.keystore" >> "$GITHUB_ENV"
+            echo "SIGN_STORE_PASS=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_PASS=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "RELEASE_APK_NAME=JustInCard-v${APP_VERSION}-release.apk" >> "$GITHUB_ENV"
+            echo "mode=production" >> "$GITHUB_OUTPUT"
+          else
+            test -s ci/justincard-ci-test.keystore
+            echo "SIGNING_MODE=ci-test" >> "$GITHUB_ENV"
+            echo "SIGN_KEYSTORE_REL=ci/justincard-ci-test.keystore" >> "$GITHUB_ENV"
+            echo "SIGN_STORE_PASS=justincard-ci-97" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_ALIAS=justincard-ci" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_PASS=justincard-ci-97" >> "$GITHUB_ENV"
+            echo "RELEASE_APK_NAME=JustInCard-v${APP_VERSION}-release-test.apk" >> "$GITHUB_ENV"
+            echo "mode=ci-test" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Release-Testsignierung aktiv; nicht für Google Play verwenden." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Release-APK ausrichten, signieren und verifizieren
+        if: env.BUILD_RELEASE == 'true'
+        id: sign_release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          RELEASE_SOURCE="${{ steps.release_build.outputs.release_source }}"
+          test -s "$RELEASE_SOURCE"
+
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+            --env UNSIGNED_APK="/home/user/hostcwd/$RELEASE_SOURCE" \
+            --env OUTPUT_APK="/home/user/hostcwd/dist/$RELEASE_APK_NAME" \
+            --env KEYSTORE_PATH="/home/user/hostcwd/$SIGN_KEYSTORE_REL" \
+            --env SIGN_STORE_PASS \
+            --env SIGN_KEY_ALIAS \
+            --env SIGN_KEY_PASS \
+            --entrypoint /bin/bash \
+            "$BUILDOZER_IMAGE" \
+            -lc '
+              set -Eeuo pipefail
+              SDK=/home/user/.buildozer/android/platform/android-sdk
+              BUILD_TOOLS="$(find "$SDK/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+              test -x "$BUILD_TOOLS/zipalign"
+              test -x "$BUILD_TOOLS/apksigner"
+              test -s "$UNSIGNED_APK"
+              test -s "$KEYSTORE_PATH"
+
+              ALIGNED=/home/user/hostcwd/dist/JustInCard-release-aligned.apk
+              "$BUILD_TOOLS/zipalign" -f -p 4 "$UNSIGNED_APK" "$ALIGNED"
+              "$BUILD_TOOLS/apksigner" sign \
+                --ks "$KEYSTORE_PATH" \
+                --ks-key-alias "$SIGN_KEY_ALIAS" \
+                --ks-pass env:SIGN_STORE_PASS \
+                --key-pass env:SIGN_KEY_PASS \
+                --out "$OUTPUT_APK" \
+                "$ALIGNED"
+              "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$OUTPUT_APK"
+              rm -f "$ALIGNED"
+            ' 2>&1 | tee logs/apksigner_release.log
+
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
+          RELEASE_TARGET="dist/$RELEASE_APK_NAME"
+          test -s "$RELEASE_TARGET"
+          sha256sum "$RELEASE_TARGET" | tee "${RELEASE_TARGET}.sha256"
+          echo "release_apk=$RELEASE_TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Release-APK prüfen
+        if: env.BUILD_RELEASE == 'true'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 apk_validate.py \
+            "${{ steps.sign_release.outputs.release_apk }}" \
+            --version "$APP_VERSION" \
+            --report-dir logs/release
+
+          {
+            echo "### Release-APK erfolgreich"
+            echo
+            echo "- Datei: \`${{ steps.sign_release.outputs.release_apk }}\`"
+            echo "- Signierung: \`${SIGNING_MODE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release-APK hochladen
+        if: env.BUILD_RELEASE == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustInCard-v${{ steps.version.outputs.version }}-Release-APK
+          path: |
+            dist/JustInCard-v${{ steps.version.outputs.version }}-release*.apk
+            dist/JustInCard-v${{ steps.version.outputs.version }}-release*.apk.sha256
+          if-no-files-found: error
+          retention-days: 21
+          compression-level: 0
+
+
+      - name: Security-Metadaten hochladen
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustInCard-v${{ steps.version.outputs.version }}-Security-Metadaten
+          path: |
+            security_integrity_manifest.json
+            security_build_metadata.json
+            logs/security_hardening.log
+          if-no-files-found: warn
+          retention-days: 21
+          compression-level: 9
+
+      - name: Vollständige Build-Protokolle hochladen
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: JustInCard-Build-Logs-${{ github.run_number }}
+          path: logs/
+          if-no-files-found: warn
+          retention-days: 21
+          compression-level: 9
+
+      - name: GitHub Release veröffentlichen
+        if: >-
+          success() &&
+          (
+            startsWith(github.ref, 'refs/tags/v') ||
+            env.PUBLISH_RELEASE == 'true'
+          )
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="just-incard-v${APP_VERSION}-build-${GITHUB_RUN_NUMBER}"
+          fi
+
+          mapfile -t FILES < <(find dist -maxdepth 1 -type f \
+            \( -name '*.apk' -o -name '*.sha256' \) | sort)
+          test "${#FILES[@]}" -ge 2
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            gh release create "$TAG" "${FILES[@]}" \
+              --title "Just InCard v${APP_VERSION}" \
+              --notes "Automatisch gebaute APKs. release-test verwendet den öffentlichen CI-Testschlüssel und ist nicht für Google Play bestimmt."
+          fi
+
+      - name: Temporäre Signierungsdatei und Berechtigungen bereinigen
+        if: always()
+        shell: bash
+        run: |
+          rm -f ci/active-release.keystore || true
+          sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true

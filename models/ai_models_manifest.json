@@ -1,0 +1,101 @@
+{
+  "version": "11.2",
+  "developer": "leenation",
+  "admin": "leenation",
+  "model_pack_mode": "stable-core-plus-optional-extended",
+  "engines": [
+    {
+      "id": "yolo_card_detector",
+      "runtime": "ONNX Runtime Android",
+      "asset": "models/yolo_card_detector.onnx",
+      "downloaded_by_workflow": true,
+      "required": false,
+      "note": "Generischer TCG-Kartenlokalisierer für Binderseiten. Externe Modelllizenz vor öffentlicher Weitergabe prüfen.",
+      "gallery_role": "Primärer Mehrkarten-/Binderseiten-Lokalisierer."
+    },
+    {
+      "id": "mediapipe_object_detector",
+      "dependency": "com.google.mediapipe:tasks-vision:0.10.35",
+      "required": false,
+      "note": "Task-Laufzeit ist eingebunden; konkrete Erkennung benötigt ein kompatibles Modell.",
+      "assets": [
+        "models/mediapipe_card_detector.tflite",
+        "models/mediapipe_card_detector.task"
+      ],
+      "gallery_role": "Zusätzliche Kartenflächen-Erkennung; Resultate werden mit YOLO/OpenCV fusioniert."
+    },
+    {
+      "id": "paddleocr",
+      "runtime": "ONNX Runtime Android / optionaler Python-Adapter",
+      "assets": [
+        "models/paddleocr/det/inference.onnx",
+        "models/paddleocr/rec_latin/inference.onnx",
+        "models/paddleocr/rec_latin/ppocrv5_latin_dict.vocab"
+      ],
+      "downloaded_by_workflow": true,
+      "required": false,
+      "gallery_role": "Zusatz-OCR je isolierter Kartenfläche; stabiler ML-Kit-Fallback bleibt aktiv."
+    },
+    {
+      "id": "mlkit_text",
+      "dependency": "com.google.mlkit:text-recognition*:16.0.1",
+      "required": true,
+      "scripts": [
+        "latin",
+        "chinese",
+        "japanese",
+        "korean",
+        "devanagari"
+      ]
+    },
+    {
+      "id": "easyocr",
+      "runtime": "optionaler Python-/Server-Adapter",
+      "required": false,
+      "note": "PyTorch/EasyOCR wird nicht in den stabilen Android-Core gezwungen."
+    },
+    {
+      "id": "opencv_orb_akaze",
+      "dependency": "org.opencv:opencv:4.12.0",
+      "required": true,
+      "operations": [
+        "card-contours",
+        "ORB",
+        "AKAZE"
+      ]
+    },
+    {
+      "id": "mobilenet_v3_embedder",
+      "dependency": "com.google.mediapipe:tasks-vision:0.10.35",
+      "asset": "models/mobilenet_v3_small_075_224_embedder.tflite",
+      "downloaded_by_workflow": true,
+      "required": false,
+      "gallery_role": "Artwork-Embedding zusätzlich zu ORB/AKAZE und Bildhash."
+    },
+    {
+      "id": "sentence_transformer",
+      "runtime": "ONNX Runtime Android / optionales Python-Paket / lokaler N-Gramm-Fallback",
+      "assets": [
+        "models/minilm/model_quantized.onnx",
+        "models/minilm/minilm.vocab"
+      ],
+      "downloaded_by_workflow": true,
+      "required": false,
+      "note": "all-MiniLM-L6-v2 ist primär englisch; mehrsprachige OCR nutzt zusätzlich Token-/N-Gramm-Abgleich."
+    }
+  ],
+  "gallery_pipeline_v1093": {
+    "max_regions_per_image": 64,
+    "region_fusion": "weighted NMS / detector consensus",
+    "isolated_sessions": true,
+    "ocr_merge": "engine-provenance line fusion",
+    "identifier_priority": [
+      "Set-Code",
+      "Passcode",
+      "Metadata",
+      "Artwork",
+      "Name",
+      "Effect"
+    ]
+  }
+}

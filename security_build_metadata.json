@@ -1,0 +1,8 @@
+{
+  "version": "11.2",
+  "build": 1120,
+  "developer": "leenation",
+  "admin": "leenation",
+  "security_model": "signed-release + integrity-manifest + stripped-symbols + best-effort-obfuscation",
+  "limitations": "Absolute Unlesbarkeit oder vollständiger Schutz vor Reverse Engineering ist technisch nicht garantierbar."
+}
