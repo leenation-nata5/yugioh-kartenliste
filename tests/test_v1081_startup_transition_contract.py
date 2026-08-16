@@ -10,8 +10,8 @@ sys.path.insert(0, str(ROOT))
 
 from app_version import APP_VERSION, APP_BUILD
 
-assert APP_VERSION == "11.2.1"
-assert APP_BUILD == 1121
+assert APP_VERSION == "11.2.2"
+assert APP_BUILD == 1122
 
 main = (ROOT / "main.py").read_text(encoding="utf-8")
 spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
@@ -25,8 +25,8 @@ assert 'branded_screen.fit_mode = "contain"' in main
 assert 'self._splash_bg_color = Color(*STARTUP_BG)' in main
 assert 'Clock.schedule_once(lambda *_: self.finish_start_loading_screen(), 0.95)' in main
 assert 'android.presplash_color = #020512' in spec
-assert re.search(r'^version\s*=\s*11\.2\.1\s*$', spec, re.M)
-assert 'just-incard-v1121-arm64-api35-ndk25b' in workflow
+assert re.search(r'^version\s*=\s*11\.2\.2\s*$', spec, re.M)
+assert 'just-incard-v1122-arm64-api35-ndk25b' in workflow
 assert 'tests/test_v1081_startup_transition_contract.py' in workflow
 
 im = Image.open(ROOT / "presplash.png").convert("RGB")
@@ -34,5 +34,5 @@ assert im.size == (1080, 1920)
 corner = im.getpixel((0, 0))
 assert all(abs(a-b) <= 2 for a,b in zip(corner, (2,5,18))), corner
 
-assert sorted(p.name for p in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_1.txt"]
-print("v11.2.1 seamless startup transition contract tests: OK")
+assert sorted(p.name for p in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_2.txt"]
+print("v11.2.2 seamless startup transition contract tests: OK")

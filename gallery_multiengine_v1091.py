@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Galerie-Multi-Engine-Orchestrator für Just InCard v11.2.1.
+"""Galerie-Multi-Engine-Orchestrator für Just InCard v11.2.2.
 
 Die Galerie verarbeitet jedes Ausgangsbild und jede erkannte Kartenfläche als
 separate Scan-Session. Kartenflächen aus YOLO, MediaPipe, OpenCV und dem

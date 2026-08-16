@@ -24,8 +24,8 @@ def run() -> None:
     )
     from prepare_ai_models_v109 import CORE_ASSETS, EXTENDED_ASSETS
 
-    assert APP_VERSION == "11.2.1"
-    assert APP_BUILD == 1121
+    assert APP_VERSION == "11.2.2"
+    assert APP_BUILD == 1122
     assert APP_DEVELOPER == APP_ADMIN == "leenation"
 
     ids = {item["id"] for item in ENGINE_STACK_V109}
@@ -105,12 +105,12 @@ def run() -> None:
     assert "include_extended_ai_models" in workflow
     assert "prepare_ai_models_v109.py --extended" in workflow
     assert "tests/test_v109_multiengine_ai_contract.py" in workflow
-    assert "just-incard-v1121-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1122-arm64-api35-ndk25b" in workflow
 
     manifest = json.loads((ROOT / "models/ai_models_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == "11.2.1"
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_1.txt"]
-    print("v11.2.1 multi-engine AI scanner contract tests: OK")
+    assert manifest["version"] == "11.2.2"
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_2.txt"]
+    print("v11.2.2 multi-engine AI scanner contract tests: OK")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+Just InCard v11.2.2
+Build: 1122
+Channel: stable
+Programmierer/Admin: leenation
+
+GitHub-/APK-Build-Hotfix
+
+- Den neuen Build-Log "JustInCard-Build-Logs-3" vollständig geprüft.
+- Der Lauf erreicht weiterhin noch nicht Buildozer/Gradle und erzeugt deshalb keine APK.
+- Konkrete Ursache im Log: Preflight meldet 221 OK, 0 Warnungen und 1 Fehler, weil im GitHub-Repository gleichzeitig CHANGELOG_v11_2.txt und CHANGELOG_v11_2_1.txt vorhanden waren.
+- Ursache dafür ist ein typischer Overlay-Upload über die GitHub-Weboberfläche: Neue Dateien werden hinzugefügt/überschrieben, ältere Dateien werden dabei aber nicht automatisch aus dem Repository gelöscht.
+- Der Build darf davon ab v11.2.2 nicht mehr blockiert werden.
+- Preflight entfernt jetzt vor allen Prüfungen automatisch ausschließlich veraltete versionierte CHANGELOG_v*.txt-Dateien im Repository-Stamm und behält nur den Changelog der aktuellen Version.
+- Der GitHub-Workflow besitzt zusätzlich direkt nach der Versionsermittlung einen eigenen Bereinigungsschritt "Alte Versionsdateien aus Overlay-Upload bereinigen".
+- Dadurch werden alte Changelogs bereits vor KI-Modellvorbereitung, Preflight und Regressionstests aus dem Runner-Arbeitsbaum entfernt.
+- Der aktuelle Changelog muss weiterhin vorhanden sein; fehlt er, bricht der Workflow gezielt ab.
+- Neuer Regressionstest test_v1122_repository_overlay_contract.py prüft die automatische Bereinigung und verhindert eine erneute Blockade durch alte Changelogs.
+- Der vorherige CI-UI-Hotfix bleibt erhalten und wurde auf v11.2.2 aktualisiert.
+- Scanner, Vollbild-Live-UI, Bubble-Menü, automatische Erkennung, Mehrsprachigkeit und Galerie-Isolation bleiben unverändert erhalten.
+- Gradle/OpenCV-Speicher-Hotfix mit 4096 MB Heap und maximal zwei Gradle-Workern bleibt erhalten.
+- Version auf 11.2.2 / Build 1122 erhöht.
+- Im ausgelieferten ZIP befindet sich nur CHANGELOG_v11_2_2.txt.
+
+Wichtig
+
+Der bereitgestellte Build-Log enthält noch keinen eigentlichen Android-/Gradle-Compilerfehler. Der Lauf wird vor Buildozer durch den veralteten zusätzlichen Changelog im Repository beendet. v11.2.2 behebt genau diesen Blocker und ist so ausgelegt, dass auch ein Upload über ein bestehendes Repository nicht mehr an alten Versions-Changelogs scheitert. Falls danach ein Android-/Gradle-Fehler auftritt, ist dafür der nächste vollständige Build-Log erforderlich.

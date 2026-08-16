@@ -10,7 +10,7 @@ def run():
     from app_version import APP_VERSION, APP_BUILD
     from ai_scanner_v102 import AI_MODEL_STACK_V102, TEXT_COLOR_PROFILES_V102, CARD_LANGUAGE_CODES_V102
     from scanner_v100 import gallery_scan_profile, scanner_ai_summary, scanner_text_color_profiles, gallery_ai_runtime_hint
-    assert APP_VERSION=='11.2.1' and APP_BUILD==1121
+    assert APP_VERSION=='11.2.2' and APP_BUILD==1122
     assert len(AI_MODEL_STACK_V102)>=9
     assert len(TEXT_COLOR_PROFILES_V102)>=12
     assert all(code in CARD_LANGUAGE_CODES_V102 for code in ('de','','fr','it','pt','es','ja','ko','zh','zh-tw'))
@@ -20,6 +20,6 @@ def run():
     assert len(scanner_text_color_profiles())>=12
     assert 'MediaPipe' in scanner_ai_summary()
     assert gallery_ai_runtime_hint(2)['avg_seconds']>gallery_ai_runtime_hint(1)['avg_seconds']
-    print('v11.2.1 AI scanner compatibility tests: OK')
+    print('v11.2.2 AI scanner compatibility tests: OK')
 
 if __name__=='__main__': run()

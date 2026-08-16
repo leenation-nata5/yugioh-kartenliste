@@ -1,6 +1,6 @@
 {
-  "version": "11.2.1",
-  "build": 1121,
+  "version": "11.2.2",
+  "build": 1122,
   "developer": "leenation",
   "admin": "leenation",
   "security_model": "signed-release + integrity-manifest + stripped-symbols + best-effort-obfuscation",

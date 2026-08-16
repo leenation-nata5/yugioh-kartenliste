@@ -112,7 +112,7 @@ def run():
     assert required_icons <= available_icons, sorted(required_icons - available_icons)
     assert (ROOT / "docs" / "ui_mockup_v96.png").is_file()
 
-    print("v9.6 UI compatibility under v11.2.1: OK")
+    print("v9.6 UI compatibility under v11.2.2: OK")
 
 
 if __name__ == "__main__":
