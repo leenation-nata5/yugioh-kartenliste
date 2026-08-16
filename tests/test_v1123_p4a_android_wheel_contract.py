@@ -14,8 +14,8 @@ def run() -> None:
     from app_version import APP_BUILD, APP_VERSION
     from ci.patch_p4a_android_wheels import MARKER, OLD, patch_file
 
-    assert APP_VERSION == "11.2.3"
-    assert APP_BUILD == 1123
+    assert APP_VERSION == "11.3.0"
+    assert APP_BUILD == 1130
 
     # Reproduce the relevant p4a staging source contract and verify the patch.
     fixture = "from pythonforandroid.recipe import PyProjectRecipe\n\n" + OLD + "\n"
@@ -37,15 +37,15 @@ def run() -> None:
     assert "ci/patch_p4a_android_wheels.py" in workflow
     assert "tests/test_v1123_p4a_android_wheel_contract.py" in workflow
     assert "not a supported wheel" in workflow
-    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1130-arm64-api35-ndk25b" in workflow
 
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
-    assert "version = 11.2.3" in spec
-    assert "android.numeric_version = 1123" in spec
+    assert "version = 11.3.0" in spec
+    assert "android.numeric_version = 1130" in spec
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_2_3.txt"], txt_files
-    print("v11.2.3 p4a Android-wheel staging contract tests: OK")
+    assert txt_files == ["CHANGELOG_v11_3_0.txt"], txt_files
+    print("v11.3.0 p4a Android-wheel staging contract tests: OK")
 
 
 if __name__ == "__main__":

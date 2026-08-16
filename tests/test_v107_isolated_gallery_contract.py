@@ -14,8 +14,8 @@ def run():
     from app_version import APP_VERSION, APP_BUILD
     from ai_scanner_v102 import build_preview_records
 
-    assert APP_VERSION == "11.2.3"
-    assert APP_BUILD == 1123
+    assert APP_VERSION == "11.3.0"
+    assert APP_BUILD == 1130
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -59,12 +59,12 @@ def run():
 
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     assert "tests/test_v107_isolated_gallery_contract.py" in workflow
-    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1130-arm64-api35-ndk25b" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_2_3.txt"], txt_files
+    assert txt_files == ["CHANGELOG_v11_3_0.txt"], txt_files
 
-    print("v11.2.3 isolated gallery scan contract tests: OK")
+    print("v11.3.0 isolated gallery scan contract tests: OK")
 
 
 if __name__ == "__main__":

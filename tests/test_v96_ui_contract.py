@@ -22,8 +22,13 @@ def load_build_ui_profile():
         width = 1080
         height = 2400
 
+    from ui_v110 import cap_safe_insets as cap_safe_insets_v110
     from ui_v110 import make_layout_profile as make_layout_profile_v110
-    namespace = {"Window": DummyWindow(), "make_layout_profile_v110": make_layout_profile_v110}
+    namespace = {
+        "Window": DummyWindow(),
+        "make_layout_profile_v110": make_layout_profile_v110,
+        "cap_safe_insets_v110": cap_safe_insets_v110,
+    }
     exec(segment, namespace)
     return namespace["build_ui_profile"], source
 
@@ -112,7 +117,7 @@ def run():
     assert required_icons <= available_icons, sorted(required_icons - available_icons)
     assert (ROOT / "docs" / "ui_mockup_v96.png").is_file()
 
-    print("v9.6 UI compatibility under v11.2.3: OK")
+    print("v9.6 UI compatibility under v11.3.0: OK")
 
 
 if __name__ == "__main__":

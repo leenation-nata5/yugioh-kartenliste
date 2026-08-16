@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from math import ceil
-from typing import Dict, Iterable, Mapping, Tuple
+from typing import Dict, Iterable, List, Mapping, Tuple
 
 CARD_ASPECT = 1.45  # Höhe / Breite einer Yu-Gi-Oh!-Karte (gerundeter UI-Wert)
 
@@ -279,3 +279,138 @@ def audit_profile(profile: Mapping[str, object]) -> Iterable[str]:
     if profile.get("navigation_mode") == "rail" and width < 720:
         problems.append("Rail-Navigation bei zu schmalem Fenster")
     return problems
+
+
+def cap_safe_insets(
+    viewport_width: float,
+    viewport_height: float,
+    density: float,
+    insets: Mapping[str, object],
+) -> Dict[str, float]:
+    """Begrenzt fehlerhafte Hersteller-/Immersive-Mode-Insetwerte.
+
+    Android-Hersteller melden bei ausgeblendeten Systemleisten vereinzelt die
+    reservierte *und* die sichtbare Leiste. Prozentuale Obergrenzen allein sind
+    auf sehr hohen Displays zu großzügig und erzeugen dann große Leerflächen.
+    Die Grenzen kombinieren deshalb Fensteranteil und logische dp-Werte.
+    """
+    width = max(1.0, float(viewport_width or 0))
+    height = max(1.0, float(viewport_height or 0))
+    scale = clamp(float(density or 1.0), 0.5, 6.0)
+    limits = {
+        "left": min(width * 0.10, 48.0 * scale),
+        "top": min(height * 0.08, 56.0 * scale),
+        "right": min(width * 0.10, 48.0 * scale),
+        "bottom": min(height * 0.12, 72.0 * scale),
+    }
+    return {
+        side: min(max(0.0, float((insets or {}).get(side, 0) or 0)), limits[side])
+        for side in ("left", "top", "right", "bottom")
+    }
+
+
+def rects_overlap(first: Tuple[float, float, float, float], second: Tuple[float, float, float, float]) -> bool:
+    """Prüft zwei ``x, y, width, height``-Rechtecke auf echte Überdeckung."""
+    ax, ay, aw, ah = (float(value) for value in first)
+    bx, by, bw, bh = (float(value) for value in second)
+    return ax < bx + bw and ax + aw > bx and ay < by + bh and ay + ah > by
+
+
+def scanner_control_layout(
+    viewport_width_dp: float,
+    viewport_height_dp: float,
+    *,
+    is_tablet: bool = False,
+) -> Dict[str, object]:
+    """Berechnet die kollisionsfreie Scanner-Steuerfläche in logischen dp.
+
+    Die Werte sind der Kivy-unabhängige Vertrag für den Live-Screen. Auf
+    Smartphones liegt der Status in einer zweiten Kopfzeile; ab 720 dp passen
+    Quelle, Status und Gerätename in eine Zeile. Das Quellenmenü wird bei
+    niedrigen Querformatfenstern horizontal statt außerhalb des Viewports
+    angeordnet.
+    """
+    width = max(240.0, float(viewport_width_dp or 0))
+    height = max(240.0, float(viewport_height_dp or 0))
+    compact = width < 360.0
+    landscape = width > height
+    pad = 6.0 if compact else (12.0 if is_tablet else 9.0)
+    gap = 7.0 if compact else (10.0 if is_tablet else 8.0)
+    control_h = 48.0 if compact else (56.0 if is_tablet else 52.0)
+    inner_w = max(1.0, width - 2.0 * pad)
+    wide_header = width >= 720.0
+
+    if wide_header:
+        header_h = control_h
+        source_w = clamp(inner_w * 0.20, 104.0, 150.0)
+        status_w = clamp(inner_w * 0.28, 150.0, 260.0)
+        device_w = clamp(inner_w * 0.30, 180.0, 320.0)
+        spacer_w = max(0.0, inner_w - source_w - status_w - device_w - 2.0 * gap)
+        source_rect = (pad, height - pad - control_h, source_w, control_h)
+        status_rect = (pad + source_w + gap, height - pad - control_h, status_w, control_h)
+        device_rect = (pad + source_w + gap + status_w + gap + spacer_w, height - pad - control_h, device_w, control_h)
+    else:
+        header_h = control_h * 2.0 + gap
+        source_w = clamp(inner_w * 0.34, 96.0, 138.0)
+        device_w = max(96.0, inner_w - source_w - gap)
+        source_rect = (pad, height - pad - control_h, source_w, control_h)
+        device_rect = (pad + source_w + gap, height - pad - control_h, device_w, control_h)
+        status_rect = (pad, height - pad - header_h, inner_w, control_h)
+
+    stage_top = max(pad, height - pad - header_h - gap)
+    stage_rect = (pad, pad, inner_w, max(1.0, stage_top - pad))
+    stage_w, stage_h = stage_rect[2], stage_rect[3]
+    bubble_w = clamp(stage_w * (0.34 if compact else 0.27), 108.0, 154.0)
+    vertical_menu_h = control_h * 4.0 + gap * 3.0 + pad * 2.0
+    vertical_menu_fits = stage_h >= vertical_menu_h
+    horizontal_menu_fits = stage_w >= 4.0 * 56.0 + gap * 3.0 + pad * 2.0
+    if vertical_menu_fits:
+        menu_mode = "vertical"
+    elif horizontal_menu_fits:
+        menu_mode = "horizontal"
+    else:
+        # Sehr niedrige Split-Screen-/Foldable-Fenster bekommen ein 2×2-Menü.
+        # Dadurch bleiben alle vier Touch-Ziele im Scanner statt unter der
+        # Navigation oder außerhalb des sichtbaren Fensters zu landen.
+        menu_mode = "grid"
+    menu_rects: List[Tuple[float, float, float, float]] = []
+    if menu_mode == "horizontal":
+        bubble_w = min(148.0, max(56.0, (stage_w - 2.0 * pad - 3.0 * gap) / 4.0))
+        total_w = bubble_w * 4.0 + gap * 3.0
+        start_x = stage_rect[0] + stage_w - total_w - pad
+        y = stage_rect[1] + pad
+        menu_rects = [(start_x + index * (bubble_w + gap), y, bubble_w, control_h) for index in range(4)]
+    elif menu_mode == "grid":
+        bubble_w = min(154.0, max(96.0, (stage_w - 2.0 * pad - gap) / 2.0))
+        total_w = bubble_w * 2.0 + gap
+        x = stage_rect[0] + stage_w - total_w - pad
+        y = stage_rect[1] + pad
+        menu_rects = [
+            (x, y + control_h + gap, bubble_w, control_h),
+            (x + bubble_w + gap, y + control_h + gap, bubble_w, control_h),
+            (x, y, bubble_w, control_h),
+            (x + bubble_w + gap, y, bubble_w, control_h),
+        ]
+    else:
+        x = stage_rect[0] + stage_w - bubble_w - pad
+        start_y = stage_rect[1] + pad
+        menu_rects = [(x, start_y + index * (control_h + gap), bubble_w, control_h) for index in range(4)]
+
+    result_w = min(520.0 if is_tablet else 430.0, max(220.0, stage_w - 2.0 * pad))
+    result_h = 112.0 if compact else 128.0
+    result_rect = (stage_rect[0] + pad, stage_rect[1] + pad, result_w, min(result_h, max(control_h, stage_h - 2.0 * pad)))
+    return {
+        "pad_dp": pad,
+        "gap_dp": gap,
+        "control_height_dp": control_h,
+        "header_mode": "single" if wide_header else "stacked",
+        "header_height_dp": header_h,
+        "source_rect": source_rect,
+        "status_rect": status_rect,
+        "device_rect": device_rect,
+        "stage_rect": stage_rect,
+        "menu_mode": menu_mode,
+        "menu_rects": menu_rects,
+        "bubble_width_dp": bubble_w,
+        "result_rect": result_rect,
+    }

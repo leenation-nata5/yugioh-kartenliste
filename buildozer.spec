@@ -8,7 +8,7 @@ source.include_exts = py,pyc,json,png,jpg,jpeg,webp,kv,tflite,task,onnx,vocab
 source.exclude_dirs = .git,.github,.buildozer,bin,__pycache__,logs,tests,scripts,docs,ci
 source.exclude_patterns = preflight_check.py,apk_validate.py,prepare_release_hardening.py,prepare_ai_models_v109.py
 
-version = 11.2.3
+version = 11.3.0
 requirements = python3,kivy,openssl,certifi,pyjnius,plyer,pillow
 
 # Hoch- und Querformat; die App wählt beim Start und bei Größenänderungen
@@ -26,7 +26,7 @@ android.minapi = 24
 android.ndk = 25b
 android.ndk_api = 24
 android.accept_sdk_license = True
-# v11.2.3: bewusst nur 64-Bit ARM. Der vollständige GitHub-Log zeigte einen
+# v11.3.0: bewusst nur 64-Bit ARM. Der vollständige GitHub-Log zeigte einen
 # defekten, zwischen zwei ABI-Durchläufen wiederverwendeten pip-Venv.
 # Ein einzelnes ABI beseitigt diesen Fehler und unterstützt aktuelle Android-Geräte.
 android.archs = arm64-v8a
@@ -49,7 +49,7 @@ android.gradle_dependencies = com.google.mlkit:text-recognition:16.0.1,com.googl
 android.add_compile_options = "sourceCompatibility = 1.8", "targetCompatibility = 1.8"
 android.add_packaging_options = "pickFirst 'lib/**/libc++_shared.so'", "exclude 'META-INF/DEPENDENCIES'", "exclude 'META-INF/LICENSE*'", "exclude 'META-INF/NOTICE*'", "exclude 'META-INF/*.kotlin_module'", "exclude 'META-INF/INDEX.LIST'"
 android.add_gradle_repositories = "google()", "mavenCentral()"
-android.numeric_version = 1123
+android.numeric_version = 1130
 
 # Native KI-Bridges (ML Kit, OpenCV, ONNX/YOLO).
 android.add_src = android_src

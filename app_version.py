@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Zentrale Versionsdaten für App, Tests und GitHub Actions."""
 
-APP_VERSION = "11.2.3"
-APP_BUILD = 1123
+APP_VERSION = "11.3.0"
+APP_BUILD = 1130
 APP_CHANNEL = "stable"
 APP_DEVELOPER = "leenation"
 APP_ADMIN = "leenation"

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""python-for-android hook for Just InCard v11.2.3.
+"""python-for-android hook for Just InCard v11.3.0.
 
 The Buildozer option ``android.extra_manifest_application_arguments`` writes
 *attributes* into the opening <application ...> tag. It must not contain child
@@ -150,7 +150,7 @@ def _patch_gradle_properties(dist_root: Path) -> dict:
 
     if kept and kept[-1].strip():
         kept.append("")
-    kept.append("# Just InCard v11.2.3: GitHub/OpenCV Gradle memory hotfix")
+    kept.append("# Just InCard v11.3.0: GitHub/OpenCV Gradle memory hotfix")
     for key, value in GRADLE_MEMORY_PROPERTIES.items():
         kept.append(f"{key}={value}")
     props_path.write_text("\n".join(kept).rstrip() + "\n", encoding="utf-8")

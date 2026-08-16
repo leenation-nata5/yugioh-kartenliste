@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Scanner-Kern fuer Just InCard v11.2.3.
+"""Scanner-Kern fuer Just InCard v11.3.0.
 
 Die Datei ist absichtlich Kivy-unabhaengig. Sie enthaelt Zeitbudgets, Messwerte,
 Dateiformatregeln und kleine Bewertungs-/Normalisierungshelfer fuer den Scanner.

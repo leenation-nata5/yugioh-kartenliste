@@ -22,8 +22,8 @@ def run():
         scan_mode_profile,
     )
 
-    assert APP_VERSION == "11.2.3"
-    assert APP_BUILD == 1123
+    assert APP_VERSION == "11.3.0"
+    assert APP_BUILD == 1130
 
     assert GALLERY_SCAN_MODE == "gründlich"
     assert scan_mode_profile("schnell")["hard_timeout_seconds"] == 6.0
@@ -115,17 +115,17 @@ def run():
     assert "Bilder scannen" not in search_section
     assert "open_camera_scanner" not in search_section
 
-    assert re.search(r"^version\s*=\s*11\.2\.3\s*$", spec, re.M)
+    assert re.search(r"^version\s*=\s*11\.3\.0\s*$", spec, re.M)
     assert re.search(r"^android\.archs\s*=\s*arm64-v8a\s*$", spec, re.M)
     assert "android debug" in workflow
     assert "android release" in workflow
     assert "tests/test_v100_scanner_contract.py" in workflow
-    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1130-arm64-api35-ndk25b" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_2_3.txt"], txt_files
+    assert txt_files == ["CHANGELOG_v11_3_0.txt"], txt_files
 
-    print("v11.2.3 gallery precision scanner/UI/workflow contract tests: OK")
+    print("v11.3.0 gallery precision scanner/UI/workflow contract tests: OK")
 
 
 if __name__ == "__main__":

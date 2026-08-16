@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Regressionstest für den GitHub-Actions-Abbruch vor dem APK-Build in v11.2.3."""
+"""Regressionstest für den GitHub-Actions-Abbruch vor dem APK-Build in v11.3.0."""
 from __future__ import annotations
 
 import re
@@ -13,8 +13,8 @@ sys.path.insert(0, str(ROOT))
 def run():
     from app_version import APP_VERSION, APP_BUILD
 
-    assert APP_VERSION == "11.2.3"
-    assert APP_BUILD == 1123
+    assert APP_VERSION == "11.3.0"
+    assert APP_BUILD == 1130
 
     main = (ROOT / "main.py").read_text(encoding="utf-8")
     assert "source_menu_gallery_bubble" in main
@@ -35,15 +35,15 @@ def run():
     assert "scanner_fullscreen_layout" in v107
 
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
-    assert re.search(r"^version\s*=\s*11\.2\.3\s*$", spec, re.M)
-    assert "android.numeric_version = 1123" in spec
+    assert re.search(r"^version\s*=\s*11\.3\.0\s*$", spec, re.M)
+    assert "android.numeric_version = 1130" in spec
 
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     assert "tests/test_v1123_ci_legacy_contract_hotfix.py" in workflow
-    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1130-arm64-api35-ndk25b" in workflow
 
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_3.txt"]
-    print("v11.2.3 GitHub Actions legacy-contract hotfix tests: OK")
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_3_0.txt"]
+    print("v11.3.0 GitHub Actions legacy-contract hotfix tests: OK")
 
 
 if __name__ == "__main__":

@@ -165,6 +165,7 @@ jobs:
           python3 tests/test_v1123_ci_legacy_contract_hotfix.py 2>&1 | tee logs/test_v1123_ci_legacy_contract_hotfix.log
           python3 tests/test_v1123_repository_overlay_contract.py 2>&1 | tee logs/test_v1123_repository_overlay_contract.log
           python3 tests/test_v1123_p4a_android_wheel_contract.py 2>&1 | tee logs/test_v1123_p4a_android_wheel_contract.log
+          python3 tests/test_v113_ui_performance_contract.py 2>&1 | tee logs/test_v113_ui_performance_contract.log
 
       - name: Freien Speicher vorbereiten
         shell: bash
@@ -180,9 +181,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer_home
-          key: just-incard-v1123-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
+          key: just-incard-v1130-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
           restore-keys: |
-            just-incard-v1123-arm64-api35-ndk25b-${{ runner.os }}-
+            just-incard-v1130-arm64-api35-ndk25b-${{ runner.os }}-
 
       - name: Build-Verzeichnisse sauber vorbereiten
         shell: bash
@@ -235,7 +236,7 @@ jobs:
           python3 ci/patch_p4a_android_wheels.py "$P4A_BUILD" \
             | tee logs/p4a_android_wheel_patch.log
 
-          grep -F 'Just InCard Android wheel staging hotfix v11.2.3' "$P4A_BUILD"
+          grep -F 'Just InCard Android wheel staging hotfix v11.3.0' "$P4A_BUILD"
           grep -F -- '--only-binary=:all:' "$P4A_BUILD"
           grep -F 'PyProjectRecipe.get_wheel_platform_tags(arch.arch, ctx)' "$P4A_BUILD"
           grep -F -- '--python-version={2}' "$P4A_BUILD"

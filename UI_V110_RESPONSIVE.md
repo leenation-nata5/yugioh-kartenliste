@@ -1,4 +1,4 @@
-# Just InCard v11.2.3 – Responsive UI
+# Just InCard v11.3.0 – Responsive UI
 
 ## Ziel
 
@@ -14,6 +14,8 @@ Die Oberfläche wird aus der aktuell verfügbaren Fenstergröße aufgebaut, nich
 - **Extra Large:** ab 1600 dp
 
 Die kleinste Gerätebreite entscheidet zusätzlich, ob das Gerät als Smartphone oder Tablet gilt. Eine Seitenleiste wird erst ab mindestens 720 dp Fensterbreite verwendet. Im schmalen Tablet-Split-Screen wechselt die App automatisch zurück zur Bottom-Navigation.
+
+Bereits geöffnete Start-, Sammlungs- und Deckseiten registrieren einen entprellten Seiten-Reflow. Damit wechseln auch dynamisch erzeugte Zeilen nach Rotation, Fold-/Unfold- oder Split-Screen-Änderungen in die neue Fensterklasse, ohne dass die App neu gestartet werden muss.
 
 ## Typografie und Touchflächen
 
@@ -35,12 +37,23 @@ Die kleinste Gerätebreite entscheidet zusätzlich, ob das Gerät als Smartphone
 ## Scanner
 
 - Kamera-Viewport wird aus der tatsächlichen Fensterhöhe berechnet
+- Quelle, Status und Gerätename liegen in Layout-Zeilen statt an absoluten Bildschirmkoordinaten
 - Livebild wird ausschließlich innerhalb des Kartenrahmens geclippt
 - Cover-Fit verwendet das native Textur-Seitenverhältnis und verzerrt das Kamerabild nicht
 - Kartenrahmen besitzt auf jeder Fenstergröße dasselbe Seitenverhältnis
-- Scanquellen wechseln auf sehr schmalen Fenstern automatisch von drei Spalten in eine vertikale Liste
+- das Bubble-Menü bleibt innerhalb des Scanner-Viewports und wechselt bei niedrigen Querformatfenstern horizontal bzw. bei extrem schmalen Split-Screen-Fenstern in ein kompaktes 2×2-Raster
+- geschlossene Bubble-Aktionen besitzen Größe und Deckkraft 0 und können keine Berührungen abfangen
+- Tipp außerhalb, Android-Zurück und die Schließen-Schaltfläche beenden den Menümodus
 - der für OCR exportierte Livebereich enthält nur die sichtbare Kartenfläche
+
+## Leistung
+
+- UI-Profile werden bis zur nächsten echten Fenster-/Inset-Änderung wiederverwendet
+- Such- und Sammlungskarten entstehen in kleinen Frame-Batches
+- Sammlung und Decks werden bei schnellen Änderungen gebündelt im Hintergrund gespeichert
+- Pause, Stop und Backup erzwingen immer einen abschließenden synchronen Speicherstand
+- unveränderte Scannertexturen lösen keinen vollständigen Geometrie-Neuaufbau aus
 
 ## Automatische Prüfung
 
-`tests/test_v110_responsive_contract.py` simuliert elf typische Fensterprofile, darunter kleine Smartphones, maximale Systemschrift, große Smartphones, Tablets, Querformat und Tablet-Split-Screen. Der Test validiert Touchziele, Navigation, Suchspalten, Kartenrahmen und Kamera-Cover-Fit.
+`tests/test_v110_responsive_contract.py` simuliert elf typische Fensterprofile, darunter kleine Smartphones, maximale Systemschrift, große Smartphones, Tablets, Querformat und Tablet-Split-Screen. `tests/test_v113_ui_performance_contract.py` ergänzt Kollisions-, Safe-Area-, Bubble-Menü- und Leistungsregeln. Die Tests validieren Touchziele, Navigation, Suchspalten, Kartenrahmen, Kamera-Cover-Fit und vollständig sichtbare Scannersteuerungen.

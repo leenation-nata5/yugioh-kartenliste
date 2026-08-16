@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Optionale OCR-Adapter für Just InCard v11.2.3.
+"""Optionale OCR-Adapter für Just InCard v11.3.0.
 
 Die Adapter sind absichtlich nicht verpflichtend. Sie werden genutzt, wenn die
 entsprechenden Python-Pakete in einer Desktop-/Server-Umgebung installiert sind.

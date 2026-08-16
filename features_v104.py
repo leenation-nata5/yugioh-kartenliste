@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Erweiterungen für Just InCard v11.2.3.
+"""Erweiterungen für Just InCard v11.3.0.
 
 Programmierer / Administrator: leenation
 

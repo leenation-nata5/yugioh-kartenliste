@@ -1,67 +1,55 @@
+# Just InCard v11.3.0
+
+Vollständiges Android-/Kivy-Projekt mit responsiver Oberfläche, Live-/Kamera-/Galeriescanner, Sammlung, Deckverwaltung und automatischer Smartphone-/Tablet-Anpassung.
+
 Programmierer / Administrator: leenation
 
+## Wichtigste Änderungen in v11.3.0
 
-
-## APK-Build-Hotfix v11.2.3
-
-Der GitHub-Workflow lädt python-for-android vor dem Build vor und wendet `ci/patch_p4a_android_wheels.py` an. Der Hotfix erhält beim finalen Pure-Python-Staging die Android-Zielplattform und Ziel-Python-Version, damit Android-spezifische Wheels wie `charset_normalizer` nicht von Host-pip als inkompatibel verworfen werden. Der Patch ist strikt und idempotent und wird durch `tests/test_v1123_p4a_android_wheel_contract.py` abgesichert.
-
-# Just InCard v11.2.3
-
-Vollständiges Android-/Kivy-Projekt mit KI-Scanner, Sammlung, Deckverwaltung und automatischer Smartphone-/Tablet-Anpassung.
+- kollisionsfreie Scanner-Kopfzeile ohne feste Bildschirmpositionen
+- vollständig schließbares Bubble-Menü mit Tipp-außerhalb- und Android-Zurück-Verhalten
+- Kamera-/Galerieinhalt nur innerhalb des gelben Kartenrahmens
+- begrenzte Android-Safe-Areas für hohe Smartphones und Hersteller-ROMs
+- gebündeltes Hintergrundspeichern für Sammlung und Decks
+- frameweises Rendern von 50 Suchergebnissen
+- paginierte, frameweise gerenderte Sammlung mit 50 Varianten pro Seite
+- weniger identische Layout-, Geometrie- und SQLite-Durchläufe
 
 ## GitHub-Build
 
-1. Den Inhalt dieses Ordners in die oberste Ebene des GitHub-Repositorys kopieren.
-2. Prüfen, dass `main.py`, `buildozer.spec` und `.github/workflows/build-android-apk.yml` direkt im Repository liegen.
+1. Den Inhalt dieses Ordners direkt in die oberste Ebene des GitHub-Repositorys kopieren.
+2. Prüfen, dass `main.py`, `buildozer.spec`, `app_version.py`, `.github` und `tests` direkt im Repository liegen.
 3. Commit erstellen und unter **Actions → Build Android APKs → Run workflow** starten.
-4. Unter Artifacts stehen Debug-APK, optionale Release-APK, Security-Metadaten und vollständige Logs bereit.
+4. Debug-APK, optionale Release-APK, Security-Metadaten und vollständige Logs stehen anschließend unter **Artifacts** bereit.
+
+Der Workflow behält den python-for-android-Hotfix für Android-Wheels, die Gradle/OpenCV-Speicherkonfiguration mit 4096 MB Heap und maximal zwei Workern sowie die native CameraX-Konfiguration bei.
 
 ## Scanner
 
 - Live/Kamera: Schnell oder Normal.
 - Galerie: immer Gründlich.
-- Galerie-Gründlich kombiniert Set-Code, Passcode, Kartenname, farbunabhängige OCR, Effekttext und lokalen Artwork-Abgleich.
-- Unsichere Ergebnisse werden mit transparenter Einzelbewertung und Alternativen geprüft.
-- Die Scan-Prüfzentrale sammelt unsichere und fehlgeschlagene Scans.
+- Set-Code und Passcode sind harte Primärmerkmale.
+- Kartenname und Effekttext dienen als Fallback; ATK, DEF, Level, Typ, Eigenschaft, Sprache und Artwork validieren Kandidaten zusätzlich.
+- Mehrfachbilder und erkannte Kartenflächen bleiben vollständig voneinander isoliert.
+- Das Livebild füllt verzerrungsfrei nur den gelben Kartenrahmen.
 
-## Sammlung
+## Sammlung und Decks
 
-- Sammlungs-Vorschau mit Bild, Effekt, Set/Rarity und Reprints.
-- Zustände, Sprache, Auflage, Lagerort, Notiz, Kaufdatum und Kaufpreis pro Kartenvariante.
-- Duplikat- und Variantenprüfung.
+- Mengen, Set, Set-Code, Rarity, Artwork und Sprache bleiben pro Variante erhalten.
+- Sammlungsvorschau zeigt Bild, Effekt, Werte, Set/Rarity und Reprints.
+- Bis zu 50 Decks; bis zu fünf Favoriten mit Vorschau.
+- Deckideen verwenden ausschließlich vorhandene Sammlungskarten.
 
-## Decks
+## Responsive Oberfläche
 
-- Bis zu 50 Decks, davon bis zu fünf Favoriten mit Vorschau.
-- Testhand-Simulation und lokale Synergieanalyse.
-- KI-Deckvorschläge nutzen ausschließlich vorhandene Karten aus der Sammlung.
+Eine APK unterstützt Smartphone, Tablet, Hochformat, Querformat und Split-Screen. Fensterbreite in dp, Dichte, Schriftfaktor und sichere Systemränder steuern Spalten, Navigation, Touchflächen, Typografie und Scannergeometrie. Smartphones verwenden Bottom-Navigation; ausreichend breite Tablets eine Navigationsleiste.
 
-## Smartphone und Tablet
-
-Die App nutzt eine gemeinsame APK und erkennt das Gerät automatisch anhand der verfügbaren dp-Breite, Pixeldichte, Ausrichtung, Schriftgröße und sicheren Systemränder. Smartphones verwenden Bottom-Navigation und einspaltige Seiten. Tablets verwenden bei ausreichender Breite Seitenleiste, mehr Spalten und größere Vorschau-/Scannerflächen.
-
-## Oberfläche v11.2.3
-
-- zentrales responsives Designsystem in `ui_v110.py`
-- moderne Startseite, Suche, Ergebniskarten, Kartendetails, Scanner, Sammlung und Deckansichten
-- Mindest-Touchflächen und eine defensive Laufzeitprüfung gegen Textüberlagerungen
-- automatische Fensterklassen für kleine Smartphones, Tablets, Querformat und Split-Screen
-- technische Details stehen in `UI_V110_RESPONSIVE.md`
+Das Kivy-unabhängige Designsystem und die Geometrietests liegen in `ui_v110.py`. Der v11.3-Vertrag befindet sich in `tests/test_v113_ui_performance_contract.py`.
 
 ## Sicherheit
 
-Die Release-Konfiguration nutzt Signierung, Zipalign, SHA-256, privaten App-Speicher, deaktiviertes Android-Backup, Integritätsmanifest und einen optimierten Python-Release-Build. Eine absolute Unlesbarkeit oder vollständiger Schutz vor Reverse Engineering kann bei keiner Android-APK garantiert werden.
+Release-Signierung, Zipalign, SHA-256, privater App-Speicher, deaktiviertes Android-Backup, Integritätsmanifest und Best-Effort-Obfuskation bleiben aktiv. Ein vollständiger Schutz vor Reverse Engineering kann bei Android-Apps technisch nicht garantiert werden.
 
 ## Aktuelle Dokumentation
 
-Nur `CHANGELOG_v11_2_3.txt` enthält die Änderungen der aktuellen Version.
-
-## Galerie-Multi-Engine-Pipeline in v11.2.3
-
-- YOLO, MediaPipe, OpenCV und Pillow liefern getrennte Kartenrahmen-Kandidaten.
-- Überlappende Erkennungen werden per gewichteter Box-Fusion zu einer Kartenfläche zusammengeführt.
-- Pro Ausgangsbild werden bis zu 64 Kartenflächen als getrennte Sessions verarbeitet.
-- Jede Session besitzt ein eigenes Crop, eine eigene OCR, eigene Kandidaten, ein eigenes Artwork und eine eigene Fehlerquelle.
-- ML Kit, PaddleOCR/EasyOCR (wenn verfügbar), ORB/AKAZE, MobileNetV3 und MiniLM liefern unabhängige Signale.
-- Set-Code und Passcode bleiben harte Primäridentifikatoren; Name und Effekt sind nur Fallbacks.
+Nur `CHANGELOG_v11_3_0.txt` enthält die Änderungen der aktuellen Version.

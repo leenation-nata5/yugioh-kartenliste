@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Just InCard v11.2.3 für Android/Kivy
+Just InCard v11.3.0 für Android/Kivy
 - schnelle Kartensuche über YGOPRODeck API v7
 - deutsche Suche als Standard, Sprache auswählbar
 - Sammlung/Decks/Einstellungen primär in SQLite, JSON als kompatible Sicherung
@@ -9,7 +9,7 @@ Just InCard v11.2.3 für Android/Kivy
 - Light/Dark Theme Umschalter
 - seitenweise Ergebnisanzeige für mehr Stabilität bei vielen Treffern
 - App-Logo über app_logo.png personalisierbar
-- scannerzentrierte v11.2.3-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
+- scannerzentrierte v11.3.0-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
   Mehrkarten-/Artwork-Fallback und geräteadaptiven Vollseiten-Prüfansichten
 """
 
@@ -83,10 +83,12 @@ from security_v104 import verify_integrity_manifest
 from ai_ensemble_v109 import ENGINE_STACK_V109, engine_availability, model_stack_summary, rerank_scan_results_v109
 from ui_v110 import (
     audit_profile as audit_ui_profile_v110,
+    cap_safe_insets as cap_safe_insets_v110,
     card_frame_geometry as card_frame_geometry_v110,
     cover_geometry as cover_geometry_v110,
     grid_height as grid_height_v110,
     make_layout_profile as make_layout_profile_v110,
+    scanner_control_layout as scanner_control_layout_v110,
     scanner_stage_height as scanner_stage_height_v110,
     text_sp as text_sp_v110,
 )
@@ -147,6 +149,7 @@ from kivy.metrics import dp
 from kivy.resources import resource_find
 from kivy.utils import platform, escape_markup
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.button import Button
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.floatlayout import FloatLayout
@@ -166,7 +169,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.widget import Widget
 
-# KI-Scanner v11.2.3: lokaler Modellstapel fuer Galerie-Genauigkeit
+# KI-Scanner v11.3.0: lokaler Modellstapel fuer Galerie-Genauigkeit
 API_URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 CARDSETS_URL = "https://db.ygoprodeck.com/api/v7/cardsets.php"
 CARDSETS_CACHE = None
@@ -406,7 +409,7 @@ def get_android_screen_metrics_snapshot():
 
 
 def build_ui_profile(metrics=None, window_size=None):
-    """Erstellt das zentrale v11.2.3-UI-Profil für Android-Fenster jeder Größe.
+    """Erstellt das zentrale v11.3.0-UI-Profil für Android-Fenster jeder Größe.
 
     Die eigentliche Breakpoint-Logik liegt in :mod:`ui_v110` und wird dort ohne
     Kivy-Abhängigkeit gegen viele Smartphone-/Tabletgrößen getestet. Android-
@@ -432,16 +435,13 @@ def build_ui_profile(metrics=None, window_size=None):
         font_scale=font_scale,
     ).as_dict()
 
-    safe = {
+    raw_safe = {
         "left": float(metrics.get("inset_left_px") or 0),
         "top": float(metrics.get("inset_top_px") or 0),
         "right": float(metrics.get("inset_right_px") or 0),
         "bottom": float(metrics.get("inset_bottom_px") or 0),
     }
-    safe["left"] = min(max(0.0, safe["left"]), win_w * 0.12)
-    safe["right"] = min(max(0.0, safe["right"]), win_w * 0.12)
-    safe["top"] = min(max(0.0, safe["top"]), win_h * 0.12)
-    safe["bottom"] = min(max(0.0, safe["bottom"]), win_h * 0.16)
+    safe = cap_safe_insets_v110(win_w, win_h, density, raw_safe)
 
     shortest_dp = float(pure.get("shortest_dp") or min(width_dp, height_dp))
     pure.update({
@@ -3782,7 +3782,14 @@ class DarkButton(Button, SurfaceMixin):
 
     def _update_disabled_visual(self, *_):
         try:
-            self.opacity = 0.46 if self.disabled else 1.0
+            # Explizit ausgeblendete Overlay-Buttons müssen bei ``disabled=True``
+            # unsichtbar bleiben. Das frühere erzwungene 0,46 war die Ursache des
+            # dauerhaft transparent sichtbaren Scanner-Bubble-Menüs.
+            current = float(getattr(self, "opacity", 1.0) or 0.0)
+            if self.disabled:
+                self.opacity = min(current, 0.46)
+            elif current > 0.05:
+                self.opacity = 1.0
         except Exception:
             pass
 
@@ -4438,11 +4445,12 @@ class InlinePageHandle:
     Bestehende v9.5-v9.8-Dialoglogik kann dadurch schrittweise als echter
     Navigationsscreen verwendet werden, ohne dunkles Modal-Overlay und ohne X.
     """
-    def __init__(self, app_ref, key, content, back_to="search"):
+    def __init__(self, app_ref, key, content, back_to="search", responsive_callback=None):
         self.app_ref = app_ref
         self.key = str(key or "page")
         self.content = content
         self.back_to = str(back_to or "search")
+        self.responsive_callback = responsive_callback if callable(responsive_callback) else None
         self.requested_size_hint = (1, 1)
         self._dismiss_callbacks = []
         self._opened = False
@@ -4497,11 +4505,22 @@ class YuGiOhApp(App):
         self.is_searching = False
         self._search_token = 0
         self._layout_event = None
+        self._layout_guard_event = None
         self._compact_panel_event = None
+        self._result_render_event = None
+        self._result_render_token = 0
+        self._result_row_refs = []
+        self._collection_save_event = None
+        self._collection_save_generation = 0
+        self._collection_persist_lock = threading.RLock()
+        self._deck_save_event = None
+        self._deck_save_generation = 0
+        self._deck_persist_lock = threading.RLock()
         self._screen_probe_generation = 0
         self._last_probe_orientation = bool(Window.width > Window.height)
         self._last_probe_window_size = (float(Window.width), float(Window.height))
         self._last_layout_signature = None
+        self._last_page_responsive_signature = None
         self.screen_metrics = {
             "width_px": int(max(1, Window.width)),
             "height_px": int(max(1, Window.height)),
@@ -4509,6 +4528,7 @@ class YuGiOhApp(App):
             "source": "kivy-startup",
         }
         self.ui_profile = build_ui_profile(self.screen_metrics)
+        self._ui_profile_signature = None
         self._interface_ready = False
         self.theme_name = "dark"
         self.permissions_requested = False
@@ -4531,6 +4551,7 @@ class YuGiOhApp(App):
         self._current_section = "home"
         self._active_inline_page = None
         self._inline_page_outer = None
+        self._inline_responsive_callback = None
         self._scanner_resume_callback = None
         self._scan_cancel_requested = False
         self._scan_pause_requested = False
@@ -4594,9 +4615,15 @@ class YuGiOhApp(App):
         Clock.schedule_once(lambda *_: threading.Thread(target=self.run_integrity_check_v104, daemon=True).start(), 2.0)
         return self.root_holder
 
-    def make_inline_page(self, key, content, back_to="search"):
+    def make_inline_page(self, key, content, back_to="search", responsive_callback=None):
         """Erzeugt einen Hauptscreen statt eines modalen Popups."""
-        return InlinePageHandle(self, key, content, back_to=back_to)
+        return InlinePageHandle(
+            self,
+            key,
+            content,
+            back_to=back_to,
+            responsive_callback=responsive_callback,
+        )
 
     def _activate_inline_page(self, handle):
         previous = getattr(self, "_active_inline_page", None)
@@ -4620,6 +4647,7 @@ class YuGiOhApp(App):
         self.page_host.clear_widgets()
         self.page_host.add_widget(outer)
         self._inline_page_outer = outer
+        self._inline_responsive_callback = getattr(handle, "responsive_callback", None)
         self._active_inline_page = handle
         self._current_section = handle.key
         self._set_navigation_active(handle.key)
@@ -4634,6 +4662,7 @@ class YuGiOhApp(App):
         if current is target:
             self._active_inline_page = None
             self._inline_page_outer = None
+            self._inline_responsive_callback = None
         try:
             target._dispatch_dismiss()
         except Exception:
@@ -4654,13 +4683,15 @@ class YuGiOhApp(App):
                 self.show_home_page()
 
     def show_home_page(self, *_):
-        """Moderne v11.2.3-Startseite mit klaren Aktionen und sicheren Höhen."""
+        """Moderne v11.3.0-Startseite mit klaren Aktionen und sicheren Höhen."""
         current = getattr(self, "_active_inline_page", None)
         if current is not None:
             self._close_inline_page(current, navigate=False)
         profile = self.current_ui_profile()
         safe = profile.get("safe", {})
         is_tablet = bool(profile.get("is_tablet"))
+        width_dp = float(profile.get("width_dp") or 0)
+        wide_home = is_tablet and width_dp >= 720
         compact = profile.get("device_class") == "compact_phone"
         gap = dp(float(profile.get("gap_dp") or 8))
         outer_margin = dp(float(profile.get("outer_margin_dp") or 12))
@@ -4685,9 +4716,9 @@ class YuGiOhApp(App):
 
         logo_source = resource_find(APP_LOGO_TRANSPARENT_FILE) or resource_find(APP_LOGO_FILE) or ui_asset("app_mark") or ""
         hero = SurfaceBox(
-            orientation="horizontal" if is_tablet and not compact else "vertical",
+            orientation="horizontal" if wide_home and not compact else "vertical",
             size_hint_y=None,
-            height=dp(270 if is_tablet else (290 if compact else 320)),
+            height=dp(270 if wide_home else (290 if compact else 320)),
             spacing=dp(16),
             padding=dp(18 if compact else 22),
             bg_color=PANEL_BG_2,
@@ -4697,7 +4728,7 @@ class YuGiOhApp(App):
         )
         logo_box = SurfaceBox(
             orientation="vertical",
-            size_hint=(0.38 if is_tablet else 1, 1 if is_tablet else 0.50),
+            size_hint=(0.38 if wide_home else 1, 1 if wide_home else 0.50),
             padding=dp(8),
             bg_color=tuple(list(ACCENT[:3]) + [0.055]),
             border_color=(0, 0, 0, 0),
@@ -4706,12 +4737,12 @@ class YuGiOhApp(App):
         logo_box.add_widget(Image(source=logo_source, allow_stretch=True, keep_ratio=True))
         hero.add_widget(logo_box)
 
-        hero_text = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.62 if is_tablet else 1, 1 if is_tablet else 0.50))
+        hero_text = BoxLayout(orientation="vertical", spacing=dp(6), size_hint=(0.62 if wide_home else 1, 1 if wide_home else 0.50))
         hero_text.add_widget(DarkLabel(
             text="[b]Just InCard[/b]",
             markup=True,
             color=TEXT,
-            halign="left" if is_tablet else "center",
+            halign="left" if wide_home else "center",
             size_hint_y=None,
             height=dp(48),
             font_size=ui_font_px(text_sp_v110("display", profile), profile),
@@ -4719,7 +4750,7 @@ class YuGiOhApp(App):
         hero_text.add_widget(DarkLabel(
             text="Scannen. Sammeln. Decks bauen.",
             color=GOLD,
-            halign="left" if is_tablet else "center",
+            halign="left" if wide_home else "center",
             size_hint_y=None,
             height=dp(28),
             font_size=ui_font_px(text_sp_v110("section", profile), profile),
@@ -4727,13 +4758,13 @@ class YuGiOhApp(App):
         hero_text.add_widget(AutoHeightLabel(
             text="Deine Yu-Gi-Oh!-Karten in einer klaren, schnellen Oberfläche – passend für Smartphone, Tablet, Hochformat und Querformat.",
             color=MUTED,
-            halign="left" if is_tablet else "center",
+            halign="left" if wide_home else "center",
             min_height=dp(58),
             font_size=ui_font_px(text_sp_v110("body", profile), profile, body=True),
         ))
         hero_status = ModernChip("Scanner und Sammlung bereit", "scan", active=True, accent=SUCCESS, size_hint_x=None)
-        hero_status.width = dp(250 if is_tablet else 230)
-        if not is_tablet:
+        hero_status.width = dp(250 if wide_home else 230)
+        if not wide_home:
             status_holder = BoxLayout(orientation="horizontal", size_hint_y=None, height=dp(40))
             status_holder.add_widget(Widget())
             status_holder.add_widget(hero_status)
@@ -4746,7 +4777,7 @@ class YuGiOhApp(App):
 
         body.add_widget(SectionTitle("Schnellzugriff", "Die wichtigsten Bereiche ohne Umwege", accent=ACCENT))
         quick_grid = GridLayout(
-            cols=4 if is_tablet and float(profile.get("width_dp") or 0) >= 900 else 2,
+            cols=4 if wide_home and width_dp >= 900 else 2,
             size_hint_y=None,
             spacing=gap,
         )
@@ -4777,14 +4808,14 @@ class YuGiOhApp(App):
             radius=dp(22),
         )
         stats.add_widget(SectionTitle("Dein Überblick", "Lokal auf diesem Gerät", accent=SUCCESS))
-        stat_grid = GridLayout(cols=2 if not is_tablet else 4, spacing=gap, size_hint_y=None)
+        stat_grid = GridLayout(cols=4 if wide_home else 2, spacing=gap, size_hint_y=None)
         values = [
             (f"{total_cards:,}".replace(",", "."), "Karten"),
             (str(unique_cards), "Varianten"),
             (str(len(getattr(self, "decks", []) or [])), "Decks"),
             ("Bereit", "Scanner"),
         ]
-        visible_values = values if is_tablet else values[:2]
+        visible_values = values if wide_home else values[:2]
         stat_grid.height = dp(62)
         for value, label in visible_values:
             pill = SurfaceBox(orientation="vertical", padding=(dp(8), dp(5)), bg_color=INPUT_BG, border_color=(1, 1, 1, 0.06), radius=dp(16))
@@ -4832,9 +4863,10 @@ class YuGiOhApp(App):
             return
         try:
             self.screen_metrics = dict(metrics or {})
-            self.ui_profile = build_ui_profile(self.screen_metrics, (Window.width, Window.height))
+            self._ui_profile_signature = None
+            self.ui_profile = self.current_ui_profile()
             if getattr(self, "_interface_ready", False):
-                self.apply_responsive_layout(force=True)
+                self._refresh_current_responsive_page(force=True)
         except Exception as exc:
             try:
                 self.append_crash_log(exc)
@@ -4890,11 +4922,32 @@ class YuGiOhApp(App):
         threading.Thread(target=worker, daemon=True).start()
 
     def current_ui_profile(self):
-        """Gibt immer ein zur aktuellen Window-Größe passendes UI-Profil zurück."""
+        """Gibt ein zur aktuellen Fenstergröße passendes, gecachtes UI-Profil zurück.
+
+        Das Profil wurde zuvor bei jeder erzeugten Ergebniszeile neu berechnet.
+        Gerade 50 Suchkarten verursachten dadurch hunderte identische Berechnungen.
+        Der Cache wird bei Größe, Dichte, Schriftfaktor oder Safe-Area automatisch
+        ungültig und spart im normalen Scroll-/Sammlungsbetrieb Arbeit.
+        """
         try:
-            self.ui_profile = build_ui_profile(getattr(self, "screen_metrics", {}), (Window.width, Window.height))
+            metrics = getattr(self, "screen_metrics", {}) or {}
+            signature = (
+                int(round(float(Window.width))),
+                int(round(float(Window.height))),
+                round(float(metrics.get("density") or 1.0), 4),
+                round(float(metrics.get("font_scale") or 1.0), 4),
+                int(metrics.get("smallest_width_dp") or 0),
+                int(metrics.get("inset_left_px") or 0),
+                int(metrics.get("inset_top_px") or 0),
+                int(metrics.get("inset_right_px") or 0),
+                int(metrics.get("inset_bottom_px") or 0),
+            )
+            if signature != getattr(self, "_ui_profile_signature", None):
+                self.ui_profile = build_ui_profile(metrics, (Window.width, Window.height))
+                self._ui_profile_signature = signature
         except Exception:
             self.ui_profile = build_ui_profile()
+            self._ui_profile_signature = None
         return self.ui_profile
 
     def usable_window_width(self, fraction=1.0):
@@ -4982,6 +5035,12 @@ class YuGiOhApp(App):
                     return True
                 except Exception:
                     self._open_popups.pop()
+            if str(getattr(self, "_current_section", "") or "") == "scanner":
+                menu_is_open = getattr(self, "_scanner_source_menu_is_open", None)
+                toggle_menu = getattr(self, "_toggle_scanner_source_bubbles", None)
+                if callable(menu_is_open) and callable(toggle_menu) and menu_is_open():
+                    toggle_menu(False)
+                    return True
             inline_page = getattr(self, "_active_inline_page", None)
             if inline_page is not None:
                 inline_page.dismiss()
@@ -5107,10 +5166,10 @@ class YuGiOhApp(App):
             if not result.get("ok"):
                 self.append_crash_log(
                     "Integritätsabweichung: " + json.dumps(result, ensure_ascii=False),
-                    "Security v11.2.3",
+                    "Security v11.3.0",
                 )
         except Exception as exc:
-            self.append_crash_log(exc, "Security v11.2.3")
+            self.append_crash_log(exc, "Security v11.3.0")
 
     def load_settings(self):
         data = {}
@@ -5696,8 +5755,8 @@ class YuGiOhApp(App):
         # Android kann Apps im Hintergrund jederzeit beenden. Wichtige Nutzerdaten
         # werden deshalb vor dem Pausieren atomar gesichert.
         try:
-            self.save_collection(show_popup=False)
-            self.save_decks()
+            self.save_collection(show_popup=False, immediate=True)
+            self.save_decks(immediate=True)
             self.save_settings()
             self.save_scan_history()
             self.save_session_state(show_popup=False)
@@ -5707,8 +5766,8 @@ class YuGiOhApp(App):
 
     def on_stop(self):
         try:
-            self.save_collection(show_popup=False)
-            self.save_decks()
+            self.save_collection(show_popup=False, immediate=True)
+            self.save_decks(immediate=True)
             self.save_settings()
             self.save_session_state(show_popup=False)
         except Exception as exc:
@@ -6139,7 +6198,6 @@ class YuGiOhApp(App):
         self.left.add_widget(self.pager_row)
         self.results_grid = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
         self.results_grid.bind(minimum_height=self.results_grid.setter("height"))
-        self.results_grid.bind(height=lambda *_: self._schedule_compact_panel_refresh())
         self.results_scroll = ScrollView(bar_width=dp(4), scroll_type=["bars", "content"], do_scroll_x=False)
         self.results_scroll.add_widget(self.results_grid)
         self.left.add_widget(self.results_scroll)
@@ -6329,7 +6387,8 @@ class YuGiOhApp(App):
                 self._last_probe_orientation = orientation
                 self._last_probe_window_size = (float(Window.width), float(Window.height))
                 self.start_background_screen_probe()
-            self.ui_profile = build_ui_profile(getattr(self, "screen_metrics", {}), (Window.width, Window.height))
+            self._ui_profile_signature = None
+            self.ui_profile = self.current_ui_profile()
         except Exception:
             pass
         if self._layout_event:
@@ -6338,10 +6397,51 @@ class YuGiOhApp(App):
             except Exception:
                 pass
         # Etwas längeres Debounce verhindert Layout-Flackern beim Drehen/Falten.
-        self._layout_event = Clock.schedule_once(lambda *_: self.apply_responsive_layout(), 0.02 if getattr(self, "reduce_motion", False) else 0.14)
+        self._layout_event = Clock.schedule_once(
+            self._refresh_current_responsive_page,
+            0.02 if getattr(self, "reduce_motion", False) else 0.14,
+        )
+
+    def _refresh_current_responsive_page(self, *_, force=False):
+        """Reflowt auch bereits geöffnete Hauptseiten nach Rotation/Split-Screen.
+
+        Das Grundlayout allein reicht für dynamisch aufgebaute Karten-/Deckzeilen
+        nicht aus. Jede Inline-Seite kann deshalb einen kleinen Refresh-Callback
+        registrieren. Er läuft nur nach einer echten Fensterklassenänderung und
+        wird zusammen mit dem globalen Resize-Debounce ausgeführt.
+        """
+        if not getattr(self, "_interface_ready", False) and not force:
+            return
+        profile = self.current_ui_profile()
+        safe = profile.get("safe", {})
+        signature = (
+            int(round(float(profile.get("width_dp") or 0) / 4.0)),
+            int(round(float(profile.get("height_dp") or 0) / 4.0)),
+            str(profile.get("layout_mode") or ""),
+            str(profile.get("window_class") or ""),
+            int(float(safe.get("left", 0) or 0)),
+            int(float(safe.get("top", 0) or 0)),
+            int(float(safe.get("right", 0) or 0)),
+            int(float(safe.get("bottom", 0) or 0)),
+        )
+        changed = bool(force) or signature != getattr(self, "_last_page_responsive_signature", None)
+        self.apply_responsive_layout(force=bool(force))
+        if not changed:
+            return
+        self._last_page_responsive_signature = signature
+        section = str(getattr(self, "_current_section", "") or "")
+        if section == "home":
+            self.show_home_page()
+            return
+        callback = getattr(self, "_inline_responsive_callback", None)
+        if section != "scanner" and callable(callback):
+            try:
+                callback()
+            except Exception as exc:
+                self.append_crash_log(exc, "responsive_inline_page")
 
     def apply_responsive_layout(self, force=False):
-        """Legt die v11.2.3-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
+        """Legt die v11.3.0-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
 
         Wichtig ist nicht die physische Pixelzahl, sondern die Breite in dp. Damit
         sehen verschiedene Smartphones nebeneinander nahezu gleich aus, während
@@ -6363,6 +6463,13 @@ class YuGiOhApp(App):
             desktop_tablet = is_tablet and width_dp >= 840
             compact_phone = not is_tablet and width_dp < 360
             phone_landscape = not is_tablet and bool(profile.get("landscape"))
+            layout_signature = (
+                int(width), int(height), profile.get("device_class"), profile.get("window_class"),
+                bool(profile.get("landscape")), is_tablet, int(safe_left), int(safe_top),
+                int(safe_right), int(safe_bottom), bool(getattr(self, "large_touch_targets", False)),
+            )
+            if not force and layout_signature == getattr(self, "_last_layout_signature", None):
+                return
 
             # Sichtbare Bestätigung, dass reale Android-Metriken verwendet werden.
             density_value = float(profile.get("density") or 1.0)
@@ -6474,7 +6581,7 @@ class YuGiOhApp(App):
             self.tablet_dashboard.opacity = 0
             self.tablet_dashboard.disabled = True
 
-            # Suchkarte: Spalten folgen dem zentral getesteten v11.2.3-Profil.
+            # Suchkarte: Spalten folgen dem zentral getesteten v11.3.0-Profil.
             search_cols = max(1, int(profile.get("search_columns") or 1))
             self.search_panel.cols = search_cols
             self.search_panel.spacing = gap
@@ -6588,12 +6695,14 @@ class YuGiOhApp(App):
                 self.detail_name_label.font_size = ui_font_px(14.0 if compact_phone else (16.5 if is_tablet else 15.0), profile)
             if hasattr(self, "detail_meta_label"):
                 self.detail_meta_label.font_size = ui_font_px(9.8 if compact_phone else 10.6, profile, body=True)
-            self._last_layout_signature = (
-                int(width), int(height), profile.get("device_class"), profile.get("window_class"),
-                bool(profile.get("landscape")), is_tablet, int(safe_left), int(safe_top),
-                int(safe_right), int(safe_bottom),
-            )
-            Clock.schedule_once(lambda *_: self.apply_runtime_layout_guard_v110(), 0.03)
+            self._last_layout_signature = layout_signature
+            previous_guard = getattr(self, "_layout_guard_event", None)
+            if previous_guard is not None:
+                try:
+                    previous_guard.cancel()
+                except Exception:
+                    pass
+            self._layout_guard_event = Clock.schedule_once(lambda *_: self.apply_runtime_layout_guard_v110(), 0.05)
         except Exception as exc:
             try:
                 self.append_crash_log(exc, "apply_responsive_layout_v96")
@@ -6658,18 +6767,22 @@ class YuGiOhApp(App):
                             adjusted += 1
             except Exception:
                 continue
-        try:
-            self.record_performance(
-                "layout_guard_v110",
-                details={
-                    "visited": visited,
-                    "adjusted": adjusted,
-                    "device_class": profile.get("device_class"),
-                    "window_class": profile.get("window_class"),
-                },
-            )
-        except Exception:
-            pass
+        # Nur echte Korrekturen werden persistiert. Eine SQLite-Schreiboperation
+        # nach jedem normalen Layoutdurchlauf war auf schwächeren Geräten selbst
+        # als Mikroruckler messbar.
+        if adjusted:
+            try:
+                self.record_performance(
+                    "layout_guard_v110",
+                    details={
+                        "visited": visited,
+                        "adjusted": adjusted,
+                        "device_class": profile.get("device_class"),
+                        "window_class": profile.get("window_class"),
+                    },
+                )
+            except Exception:
+                pass
         return {"visited": visited, "adjusted": adjusted}
 
     def grid_height(self, item_count, columns, item_height, spacing=0):
@@ -6820,6 +6933,16 @@ class YuGiOhApp(App):
     def render_current_page(self, reset_scroll=True):
         if not hasattr(self, "results_grid"):
             return
+        self._result_render_token = int(getattr(self, "_result_render_token", 0) or 0) + 1
+        render_token = self._result_render_token
+        previous_event = getattr(self, "_result_render_event", None)
+        if previous_event is not None:
+            try:
+                previous_event.cancel()
+            except Exception:
+                pass
+        self._result_render_event = None
+        self._result_row_refs = []
         self.results_grid.clear_widgets()
         total = len(self.search_results)
         if total == 0:
@@ -6847,13 +6970,28 @@ class YuGiOhApp(App):
         self.prev_page_btn.disabled = self.current_page <= 0
         self.next_page_btn.disabled = self.current_page >= pages - 1
 
-        # Nur die aktuelle Seite wird als Widget-Liste gebaut. Das verhindert Ruckler/Abstürze bei sehr vielen Treffern.
-        for card in page_cards:
-            self.results_grid.add_widget(self.create_result_row(card))
+        # Maximal 50 Karten bleiben pro Seite, werden aber in kleinen Frame-Batches
+        # aufgebaut. So blockieren Widget-/Textur-Erzeugung und AsyncImage-Starts
+        # den Android-UI-Thread nicht mehr für einen langen sichtbaren Ruckler.
+        performance_key = str(getattr(self.resolved_performance_mode(), "key", "balanced") or "balanced")
+        batch_size = {"eco": 5, "balanced": 8, "quality": 10}.get(performance_key, 8)
+
+        def render_batch(index=0):
+            if render_token != getattr(self, "_result_render_token", render_token):
+                return
+            end_index = min(len(page_cards), index + batch_size)
+            for card in page_cards[index:end_index]:
+                self.results_grid.add_widget(self.create_result_row(card))
+            if end_index < len(page_cards):
+                self._result_render_event = Clock.schedule_once(lambda *_: render_batch(end_index), 0)
+            else:
+                self._result_render_event = None
+                self._schedule_compact_panel_refresh()
+
+        render_batch(0)
         if reset_scroll:
             self.results_scroll.scroll_y = 1
         self.set_status(f"{total} Karte(n) gefunden. Es werden immer nur {PAGE_SIZE} pro Seite gerendert.")
-        self._schedule_compact_panel_refresh()
 
     def prev_page(self):
         if self.current_page > 0:
@@ -6978,18 +7116,39 @@ class YuGiOhApp(App):
             halign="center",
             font_size=ui_font_px(10.0, profile),
         )
+        self._result_row_refs.append({"card": card, "owned_pill": owned_pill})
         plus_btn = DarkButton(text="+ Hinzufügen", bg=SUCCESS, no_wrap=True, compact=True, on_release=lambda *_: self.add_card(card))
         for widget in (details_btn, minus_btn, owned_pill, plus_btn):
             actions.add_widget(widget)
         row.add_widget(actions)
         return row
 
-    def refresh_results_list(self, keep_scroll=True):
-        if self.search_results:
-            old_scroll_y = getattr(self.results_scroll, "scroll_y", 1) if keep_scroll and hasattr(self, "results_scroll") else 1
-            self.render_current_page(reset_scroll=False)
-            if keep_scroll and hasattr(self, "results_scroll"):
-                Clock.schedule_once(lambda *_: setattr(self.results_scroll, "scroll_y", old_scroll_y), 0)
+    def refresh_results_list(self, keep_scroll=True, rebuild=False):
+        """Aktualisiert Mengen-Pills ohne 50 Ergebniswidgets neu zu erzeugen."""
+        if not self.search_results:
+            return
+        refs = list(getattr(self, "_result_row_refs", []) or [])
+        if refs and not rebuild:
+            for ref in refs:
+                try:
+                    card = ref.get("card") or {}
+                    pill = ref.get("owned_pill")
+                    if pill is None:
+                        continue
+                    owned = collection_count_for(self.collection, card)
+                    pill.text = f"{owned}× vorhanden"
+                    pill.color = TEXT if owned else MUTED
+                    pill.set_surface_colors(
+                        tuple(list(SUCCESS[:3]) + [0.12]) if owned else INPUT_BG,
+                        tuple(list(SUCCESS[:3]) + [0.18]) if owned else (1, 1, 1, 0.08),
+                    )
+                except Exception:
+                    continue
+            return
+        old_scroll_y = getattr(self.results_scroll, "scroll_y", 1) if keep_scroll and hasattr(self, "results_scroll") else 1
+        self.render_current_page(reset_scroll=False)
+        if keep_scroll and hasattr(self, "results_scroll"):
+            Clock.schedule_once(lambda *_: setattr(self.results_scroll, "scroll_y", old_scroll_y), 0)
 
     def select_card(self, card, load_image=True):
         self.selected_card = card
@@ -7208,23 +7367,70 @@ class YuGiOhApp(App):
         if self.selected_card and get_card_id(self.selected_card) == get_card_id(card):
             self.select_card(card, load_image=False)
 
-    def save_collection(self, show_popup=True):
+    def _persist_collection_snapshot(self, snapshot):
+        """Schreibt einen unveränderlichen Sammlungsstand außerhalb des UI-Flows."""
+        if getattr(self, "app_db", None) is not None:
+            self.app_db.save_collection(snapshot)
+        atomic_write_json(self.collection_file, snapshot)
+        if bool(getattr(self, "auto_backup_enabled", True)):
+            self.auto_backup_manager.create(
+                [self.collection_file, self.decks_file, self.settings_file, self.custom_cards_file, self.scan_history_file],
+                APP_VERSION,
+                developer=APP_DEVELOPER,
+            )
+
+    def _flush_collection_save(self, show_popup=False):
+        """Beendet das Debounce und persistiert den neuesten Stand garantiert."""
+        event = getattr(self, "_collection_save_event", None)
+        if event is not None:
+            try:
+                event.cancel()
+            except Exception:
+                pass
+        self._collection_save_event = None
+        self._collection_save_generation = int(getattr(self, "_collection_save_generation", 0) or 0) + 1
+        snapshot = copy.deepcopy(self.collection)
+        with self._collection_persist_lock:
+            self._persist_collection_snapshot(snapshot)
+        if show_popup:
+            self.show_info("Gespeichert", "Sammlung wurde transaktional in SQLite gespeichert und zusätzlich als JSON gesichert.")
+
+    def save_collection(self, show_popup=True, immediate=False):
+        """Speichert ohne Ruckler bei schnellen Mengenänderungen.
+
+        Routineänderungen werden 350 ms gebündelt und im Hintergrund geschrieben.
+        Explizites Speichern sowie Pause/Stop/Backup bleiben synchron und garantiert.
+        """
+        self.update_collection_info()
         try:
-            if getattr(self, "app_db", None) is not None:
-                self.app_db.save_collection(self.collection)
-            atomic_write_json(self.collection_file, self.collection)
-            self.update_collection_info()
-            if bool(getattr(self, "auto_backup_enabled", True)):
+            if show_popup or immediate:
+                self._flush_collection_save(show_popup=show_popup)
+                return
+            self._collection_save_generation = int(getattr(self, "_collection_save_generation", 0) or 0) + 1
+            generation = self._collection_save_generation
+            previous = getattr(self, "_collection_save_event", None)
+            if previous is not None:
                 try:
-                    self.auto_backup_manager.create(
-                        [self.collection_file, self.decks_file, self.settings_file, self.custom_cards_file, self.scan_history_file],
-                        APP_VERSION,
-                        developer=APP_DEVELOPER,
-                    )
-                except Exception as backup_exc:
-                    self.append_crash_log(backup_exc, "Automatisches Backup")
-            if show_popup:
-                self.show_info("Gespeichert", "Sammlung wurde transaktional in SQLite gespeichert und zusätzlich als JSON gesichert.")
+                    previous.cancel()
+                except Exception:
+                    pass
+
+            def begin_persist(*_):
+                self._collection_save_event = None
+                snapshot = copy.deepcopy(self.collection)
+
+                def worker():
+                    try:
+                        with self._collection_persist_lock:
+                            if generation != getattr(self, "_collection_save_generation", generation):
+                                return
+                            self._persist_collection_snapshot(snapshot)
+                    except Exception as exc:
+                        Clock.schedule_once(lambda *__, _exc=exc: self.append_crash_log(_exc, "Sammlung speichern"), 0)
+
+                threading.Thread(target=worker, daemon=True).start()
+
+            self._collection_save_event = Clock.schedule_once(begin_persist, 0.35)
         except Exception as exc:
             self.show_error("Speichern fehlgeschlagen", str(exc))
 
@@ -7254,12 +7460,49 @@ class YuGiOhApp(App):
         except Exception:
             self.decks = []
 
-    def save_decks(self):
+    def _persist_deck_snapshot(self, decks):
+        if getattr(self, "app_db", None) is not None:
+            self.app_db.save_decks(decks)
+        atomic_write_json(self.decks_file, decks)
+
+    def save_decks(self, immediate=False):
+        """Bündelt aufeinanderfolgende Deckänderungen statt den UI-Thread zu blockieren."""
         try:
-            decks = self.decks[:MAX_DECKS]
-            if getattr(self, "app_db", None) is not None:
-                self.app_db.save_decks(decks)
-            atomic_write_json(self.decks_file, decks)
+            previous = getattr(self, "_deck_save_event", None)
+            if previous is not None:
+                try:
+                    previous.cancel()
+                except Exception:
+                    pass
+            self._deck_save_event = None
+            self._deck_save_generation = int(getattr(self, "_deck_save_generation", 0) or 0) + 1
+            generation = self._deck_save_generation
+
+            def persist_now():
+                decks = copy.deepcopy((self.decks or [])[:MAX_DECKS])
+                with self._deck_persist_lock:
+                    self._persist_deck_snapshot(decks)
+
+            if immediate:
+                persist_now()
+                return
+
+            def begin_persist(*_):
+                self._deck_save_event = None
+                decks = copy.deepcopy((self.decks or [])[:MAX_DECKS])
+
+                def worker():
+                    try:
+                        with self._deck_persist_lock:
+                            if generation != getattr(self, "_deck_save_generation", generation):
+                                return
+                            self._persist_deck_snapshot(decks)
+                    except Exception as exc:
+                        Clock.schedule_once(lambda *__, _exc=exc: self.append_crash_log(_exc, "Decks speichern"), 0)
+
+                threading.Thread(target=worker, daemon=True).start()
+
+            self._deck_save_event = Clock.schedule_once(begin_persist, 0.35)
         except Exception:
             pass
 
@@ -7494,7 +7737,12 @@ class YuGiOhApp(App):
         controls.add_widget(DarkButton(text="Neues Deck", bg=SUCCESS, on_release=lambda *_: (self.decks.append({"name": f"Deck {len(self.decks)+1}", "cards": []}) if len(self.decks) < MAX_DECKS else self.show_error("Deck-Limit", f"Es sind maximal {MAX_DECKS} Decks möglich."), self.save_decks(), refresh()) ))
         controls.add_widget(DarkButton(text="KI Deck", bg=GOLD, on_release=lambda *_: self.request_ai_deck_from_collection()))
         wrapper.add_widget(controls)
-        popup = self.make_inline_page("decks_all", wrapper, back_to="decks")
+        popup = self.make_inline_page(
+            "decks_all",
+            wrapper,
+            back_to="decks",
+            responsive_callback=refresh,
+        )
         refresh()
         popup.open()
 
@@ -7600,7 +7848,12 @@ class YuGiOhApp(App):
         btn_row.add_widget(DarkButton(text="Alle Decks", bg=ACCENT_2, on_release=lambda *_: self.open_all_decks_popup()))
         btn_row.add_widget(DarkButton(text="KI-Key", bg=INPUT_BG_2, on_release=lambda *_: self.open_ai_settings_popup()))
         wrapper.add_widget(btn_row)
-        popup = self.make_inline_page("decks", wrapper, back_to="home")
+        popup = self.make_inline_page(
+            "decks",
+            wrapper,
+            back_to="home",
+            responsive_callback=refresh_favorites,
+        )
         refresh_favorites()
         popup.open()
 
@@ -8412,7 +8665,25 @@ class YuGiOhApp(App):
         filter_row.add_widget(collection_search)
         filter_row.add_widget(collection_sort)
         filter_row.add_widget(collection_filter)
+        self.bind_adaptive_grid(
+            filter_row,
+            3,
+            min_item_dp=168,
+            max_cols=3,
+            min_cols=1,
+            row_height=collection_filter_h,
+            gap_px=dp(8),
+        )
         wrapper.add_widget(filter_row)
+
+        collection_pager = GridLayout(cols=3, size_hint_y=None, height=dp(48), spacing=dp(8))
+        collection_prev = DarkButton(text="Zurück", bg=INPUT_BG_2, no_wrap=True)
+        collection_page_label = DarkLabel(text="Seite 0 / 0", color=MUTED, halign="center")
+        collection_next = DarkButton(text="Weiter", bg=INPUT_BG_2, no_wrap=True)
+        collection_pager.add_widget(collection_prev)
+        collection_pager.add_widget(collection_page_label)
+        collection_pager.add_widget(collection_next)
+        wrapper.add_widget(collection_pager)
 
         scroll = ScrollView(bar_width=dp(6), scroll_type=["bars", "content"])
         grid = GridLayout(cols=1, spacing=dp(8), size_hint_y=None)
@@ -8427,60 +8698,147 @@ class YuGiOhApp(App):
             except Exception:
                 pass
 
-        def render_collection():
-            keep_scroll = getattr(scroll, "scroll_y", 1)
+        collection_page_state = {"page": 0, "token": 0, "filter_event": None, "render_event": None}
+
+        def render_collection(reset_page=False, reset_scroll=False):
+            previous_render = collection_page_state.get("render_event")
+            if previous_render is not None:
+                try:
+                    previous_render.cancel()
+                except Exception:
+                    pass
+            collection_page_state["render_event"] = None
+            collection_page_state["token"] += 1
+            render_token = collection_page_state["token"]
+            keep_scroll = 1.0 if reset_scroll else getattr(scroll, "scroll_y", 1)
             grid.clear_widgets()
             update_total_label()
+            if reset_page:
+                collection_page_state["page"] = 0
             if not self.collection:
+                collection_page_state["page"] = 0
+                collection_page_label.text = "Seite 0 / 0"
+                collection_prev.disabled = True
+                collection_next.disabled = True
                 grid.add_widget(EmptyStateCard(
                     "Deine Sammlung ist noch leer",
                     "Füge Karten über die Suche oder den Scanner hinzu. Jede Set- und Artwork-Variante bleibt getrennt.",
                     icon_name="cards",
                 ))
-            else:
-                query = normalize_search_text(collection_search.text)
-                filter_mode = collection_filter.text
-                grouped = {}
-                for key, item in self.collection.items():
-                    card = item.get("card", {})
-                    if query and query not in normalize_search_text(card.get("name", "") + " " + collection_set_label(card)[1] + " " + collection_set_label(card)[2]):
-                        continue
-                    if filter_mode == "Nur doppelte" and int(item.get("count", 0) or 0) < 2:
-                        continue
-                    if filter_mode == "Ohne Set" and (card.get("card_sets") or get_collection_set_from_card(card)):
-                        continue
-                    if filter_mode == "Ohne Bild" and get_image_url(card):
-                        continue
-                    grouped.setdefault(category_for(card), []).append((key, item))
-                for cat in CATEGORY_ORDER:
-                    items = grouped.get(cat, [])
-                    if not items:
-                        continue
-                    title_card = SurfaceBox(orientation="vertical", size_hint_y=None, height=dp(42), padding=dp(8), bg_color=INPUT_BG_2)
-                    title_card.add_widget(DarkLabel(text=f"[b]{cat}[/b]", markup=True))
-                    grid.add_widget(title_card)
-                    if collection_sort.text == "Name A-Z":
-                        items.sort(key=lambda pair: normalize_search_text(pair[1].get("card", {}).get("name", "")))
-                    elif collection_sort.text == "Set-Code":
-                        items.sort(key=lambda pair: collection_set_label(pair[1].get("card", {}))[1])
-                    elif collection_sort.text == "Rarity":
-                        items.sort(key=lambda pair: collection_set_label(pair[1].get("card", {}))[2])
-                    elif collection_sort.text == "Anzahl":
-                        items.sort(key=lambda pair: -int(pair[1].get("count", 0) or 0))
-                    else:
-                        items.sort(key=lambda pair: category_sort_key(pair[1].get("card", {})))
-                    for key, item in items:
-                        card = item.get("card", {})
-                        count = int(item.get("count", 0))
-                        grid.add_widget(self.create_collection_row(key, card, count, render_callback=render_collection, total_callback=update_total_label))
-            Clock.schedule_once(lambda *_: setattr(scroll, "scroll_y", keep_scroll), 0)
+                Clock.schedule_once(lambda *_: setattr(scroll, "scroll_y", keep_scroll), 0)
+                return
 
-        popup = self.make_inline_page("collection", wrapper, back_to="search")
+            query = normalize_search_text(collection_search.text)
+            filter_mode = collection_filter.text
+            grouped = {}
+            for key, item in self.collection.items():
+                card = item.get("card", {})
+                if query and query not in normalize_search_text(card.get("name", "") + " " + collection_set_label(card)[1] + " " + collection_set_label(card)[2]):
+                    continue
+                if filter_mode == "Nur doppelte" and int(item.get("count", 0) or 0) < 2:
+                    continue
+                if filter_mode == "Ohne Set" and (card.get("card_sets") or get_collection_set_from_card(card)):
+                    continue
+                if filter_mode == "Ohne Bild" and get_image_url(card):
+                    continue
+                grouped.setdefault(category_for(card), []).append((key, item))
+
+            flat_items = []
+            ordered_categories = list(CATEGORY_ORDER) + sorted(set(grouped) - set(CATEGORY_ORDER))
+            for category in ordered_categories:
+                items = grouped.get(category, [])
+                if collection_sort.text == "Name A-Z":
+                    items.sort(key=lambda pair: normalize_search_text(pair[1].get("card", {}).get("name", "")))
+                elif collection_sort.text == "Set-Code":
+                    items.sort(key=lambda pair: collection_set_label(pair[1].get("card", {}))[1])
+                elif collection_sort.text == "Rarity":
+                    items.sort(key=lambda pair: collection_set_label(pair[1].get("card", {}))[2])
+                elif collection_sort.text == "Anzahl":
+                    items.sort(key=lambda pair: -int(pair[1].get("count", 0) or 0))
+                else:
+                    items.sort(key=lambda pair: category_sort_key(pair[1].get("card", {})))
+                flat_items.extend((category, key, item) for key, item in items)
+
+            total_entries = len(flat_items)
+            if not total_entries:
+                collection_page_state["page"] = 0
+                collection_page_label.text = "Seite 0 / 0"
+                collection_prev.disabled = True
+                collection_next.disabled = True
+                grid.add_widget(EmptyStateCard(
+                    "Keine passenden Sammlungskarten",
+                    "Passe Suchtext, Sortierung oder Filter an.",
+                    icon_name="search",
+                ))
+                Clock.schedule_once(lambda *_: setattr(scroll, "scroll_y", keep_scroll), 0)
+                return
+
+            pages = max(1, int(math.ceil(total_entries / float(PAGE_SIZE))))
+            collection_page_state["page"] = max(0, min(int(collection_page_state.get("page") or 0), pages - 1))
+            page = collection_page_state["page"]
+            start = page * PAGE_SIZE
+            page_items = flat_items[start:start + PAGE_SIZE]
+            collection_page_label.text = f"Seite {page + 1} / {pages} • {total_entries} Varianten"
+            collection_prev.disabled = page <= 0
+            collection_next.disabled = page >= pages - 1
+
+            def render_batch(index=0, last_category=""):
+                if render_token != collection_page_state.get("token"):
+                    return
+                end_index = min(len(page_items), index + 7)
+                current_category = last_category
+                for category, key, item in page_items[index:end_index]:
+                    if category != current_category:
+                        title_card = SurfaceBox(orientation="vertical", size_hint_y=None, height=dp(42), padding=dp(8), bg_color=INPUT_BG_2)
+                        title_card.add_widget(DarkLabel(text=f"[b]{category}[/b]", markup=True))
+                        grid.add_widget(title_card)
+                        current_category = category
+                    card = item.get("card", {})
+                    count = int(item.get("count", 0))
+                    grid.add_widget(self.create_collection_row(
+                        key, card, count,
+                        render_callback=lambda: render_collection(reset_page=False, reset_scroll=False),
+                        total_callback=update_total_label,
+                    ))
+                if end_index < len(page_items):
+                    collection_page_state["render_event"] = Clock.schedule_once(
+                        lambda *_: render_batch(end_index, current_category), 0
+                    )
+                else:
+                    collection_page_state["render_event"] = None
+                    Clock.schedule_once(lambda *_: setattr(scroll, "scroll_y", keep_scroll), 0)
+
+            render_batch()
+
+        def schedule_collection_render(*_, reset_page=True):
+            previous = collection_page_state.get("filter_event")
+            if previous is not None:
+                try:
+                    previous.cancel()
+                except Exception:
+                    pass
+            collection_page_state["filter_event"] = Clock.schedule_once(
+                lambda *__: render_collection(reset_page=reset_page, reset_scroll=True),
+                0.18 if reset_page else 0.05,
+            )
+
+        def change_collection_page(delta):
+            collection_page_state["page"] = max(0, int(collection_page_state.get("page") or 0) + int(delta))
+            render_collection(reset_page=False, reset_scroll=True)
+
+        popup = self.make_inline_page(
+            "collection",
+            wrapper,
+            back_to="search",
+            responsive_callback=lambda: render_collection(reset_page=False, reset_scroll=False),
+        )
         close_top.bind(on_release=popup.dismiss)
-        collection_search.bind(text=lambda *_: render_collection())
-        collection_sort.bind(text=lambda *_: render_collection())
-        collection_filter.bind(text=lambda *_: render_collection())
-        render_collection()
+        collection_prev.bind(on_release=lambda *_: change_collection_page(-1))
+        collection_next.bind(on_release=lambda *_: change_collection_page(1))
+        collection_search.bind(text=lambda *_: schedule_collection_render(reset_page=True))
+        collection_sort.bind(text=lambda *_: schedule_collection_render(reset_page=True))
+        collection_filter.bind(text=lambda *_: schedule_collection_render(reset_page=True))
+        render_collection(reset_page=True, reset_scroll=True)
         popup.open()
 
     def open_collection_card_preview(self, card):
@@ -9035,7 +9393,7 @@ class YuGiOhApp(App):
             fallback_picker(str(exc))
 
     def open_camera_scanner(self):
-        """Vollflächiger Live-Scanner v11.2.3 mit automatischer Erkennung.
+        """Vollflächiger Live-Scanner v11.3.0 mit automatischer Erkennung.
 
         - Die Live-Fläche füllt den verfügbaren Bildschirm responsiv für Smartphones
           und Tablets.
@@ -9057,11 +9415,14 @@ class YuGiOhApp(App):
         center_line = None
         grid_lines = []
         live_fit_callback = {"callback": None}
+        live_fit_state = {"signature": None}
         photo_fit_callback = {"callback": None}
         live_camera_ref = {"widget": None}
         live_frame_ref = {"widget": None}
         live_clip_ref = {"widget": None}
         auto_scan_event = {"event": None}
+        scanner_resize_event = {"event": None}
+        live_capture_state = {"last_at": 0.0, "path": ""}
         scan_state = {
             "busy": False,
             "token": 0,
@@ -9084,25 +9445,31 @@ class YuGiOhApp(App):
             usable_h = max(dp(320), Window.height - float(safe.get("top", 0)) - float(safe.get("bottom", 0)) - dp(10))
             compact = current.get("device_class") == "compact_phone"
             tablet = bool(current.get("is_tablet"))
-            pad = dp(6 if compact else (10 if not tablet else 12))
-            bubble_h = dp(48 if compact else 52)
-            result_w = min(max(dp(250), usable_w * (0.76 if compact else 0.56)), dp(420 if not tablet else 520))
-            result_h = dp(114 if compact else 128)
-            device_w = min(max(dp(128), usable_w * 0.28), dp(320 if tablet else 250))
-            chip_w = dp(116 if compact else 124)
-            source_bubble_w = dp(126 if compact else 138)
+            density_px = max(0.5, float(dp(1)))
+            logical = scanner_control_layout_v110(
+                usable_w / density_px,
+                usable_h / density_px,
+                is_tablet=tablet,
+            )
+            pad = dp(float(logical.get("pad_dp") or 8))
+            gap = dp(float(logical.get("gap_dp") or 8))
+            bubble_h = dp(float(logical.get("control_height_dp") or 52))
+            result_rect = logical.get("result_rect") or (0, 0, 320, 128)
+            source_rect = logical.get("source_rect") or (0, 0, 120, 52)
+            source_bubble_w = dp(float(logical.get("bubble_width_dp") or 132))
             return {
                 "pad": pad,
+                "gap": gap,
                 "usable_w": usable_w,
                 "usable_h": usable_h,
                 "bubble_h": bubble_h,
-                "result_w": result_w,
-                "result_h": result_h,
-                "device_w": device_w,
-                "chip_w": chip_w,
+                "result_w": min(dp(float(result_rect[2])), max(dp(220), usable_w - 2 * pad)),
+                "result_h": dp(float(result_rect[3])),
+                "source_chip_w": dp(float(source_rect[2])),
                 "source_bubble_w": source_bubble_w,
                 "compact": compact,
                 "tablet": tablet,
+                "menu_mode": str(logical.get("menu_mode") or "vertical"),
             }
 
         metrics = scanner_metrics()
@@ -9110,15 +9477,83 @@ class YuGiOhApp(App):
         content = SurfaceBox(
             orientation="vertical",
             padding=metrics["pad"],
-            spacing=0,
+            spacing=metrics["gap"],
             bg_color=DARK_BG,
             border_color=(0, 0, 0, 0),
             radius=0,
             size_hint=(1, 1),
         )
 
-        scanner_fullscreen_layout = FloatLayout(size_hint=(1, 1))
+        scanner_fullscreen_layout = BoxLayout(orientation="vertical", size_hint=(1, 1), spacing=metrics["gap"])
         content.add_widget(scanner_fullscreen_layout)
+
+        # Kopfzeile ist ein echtes Layout und kein absolut positioniertes Overlay.
+        # Quelle/Gerät teilen sich die erste Zeile, der Status erhält auf schmalen
+        # Displays eine eigene Zeile. Damit kann kein Gerätename mehr über OCR- oder
+        # Live-Chips rutschen.
+        scanner_header = SurfaceBox(
+            orientation="vertical",
+            size_hint_y=None,
+            height=metrics["bubble_h"] * 2 + metrics["gap"] + dp(12),
+            spacing=metrics["gap"],
+            padding=dp(6),
+            bg_color=tuple(list(PANEL_BG_2[:3]) + [0.96]),
+            border_color=tuple(list(ACCENT[:3]) + [0.20]),
+            radius=dp(20),
+            elevation=0,
+        )
+        scanner_header_primary = BoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=metrics["bubble_h"],
+            spacing=metrics["gap"],
+        )
+        source_mode_chip = ModernChip("Live", "scan", active=True, accent=SUCCESS, size_hint=(None, None))
+        source_mode_chip.width = metrics["source_chip_w"]
+        source_mode_chip.height = metrics["bubble_h"]
+        scanner_header_primary.add_widget(source_mode_chip)
+
+        device_chip = SurfaceBox(
+            orientation="horizontal",
+            size_hint=(1, None),
+            height=metrics["bubble_h"],
+            spacing=dp(6),
+            padding=(dp(10), dp(5)),
+            bg_color=tuple(list(ACCENT_2[:3]) + [0.40]),
+            border_color=tuple(list(ACCENT[:3]) + [0.32]),
+            radius=metrics["bubble_h"] / 2.0,
+        )
+        device_chip.add_widget(Image(source=ui_asset("diagnostics"), size_hint=(None, 1), width=dp(18), allow_stretch=True, keep_ratio=True, opacity=0.82))
+        device_chip_label = DarkLabel(
+            text=f"[b]{html_escape(short_text(device_name, 28))}[/b]",
+            markup=True,
+            color=TEXT,
+            halign="center",
+            font_size=ui_font_px(10.8 if metrics["compact"] else 11.4, body=True),
+        )
+        try:
+            device_chip_label.shorten = True
+            device_chip_label.shorten_from = "right"
+            device_chip_label.max_lines = 1
+        except Exception:
+            pass
+        device_chip.add_widget(device_chip_label)
+        scanner_header_primary.add_widget(device_chip)
+        scanner_header.add_widget(scanner_header_primary)
+
+        scan_stage_chip = ModernChip("Automatische Erkennung aktiv", "search", active=True, accent=ACCENT, size_hint=(1, None))
+        scan_stage_chip.height = metrics["bubble_h"]
+        try:
+            scan_stage_chip.label.shorten = True
+            scan_stage_chip.label.shorten_from = "right"
+            scan_stage_chip.label.max_lines = 1
+        except Exception:
+            pass
+        scanner_header.add_widget(scan_stage_chip)
+        scanner_fullscreen_layout.add_widget(scanner_header)
+
+        scanner_stage = FloatLayout(size_hint=(1, 1))
+        scanner_fullscreen_layout.add_widget(scanner_stage)
 
         camera_holder = SurfaceBox(
             orientation="vertical",
@@ -9129,48 +9564,7 @@ class YuGiOhApp(App):
             radius=dp(24),
             elevation=1,
         )
-        scanner_fullscreen_layout.add_widget(camera_holder)
-
-        stage_top_left = BoxLayout(
-            orientation="horizontal",
-            size_hint=(None, None),
-            height=dp(42),
-            width=dp(252 if metrics["compact"] else 272),
-            spacing=dp(8),
-            pos_hint={"x": 0.02, "top": 0.985},
-        )
-        source_mode_chip = ModernChip("Live", "scan", active=True, accent=SUCCESS, size_hint=(None, None))
-        source_mode_chip.width = metrics["chip_w"]
-        source_mode_chip.height = dp(40)
-        scan_stage_chip = ModernChip("Auto-Scan", "search", active=True, accent=ACCENT, size_hint=(None, None))
-        scan_stage_chip.width = metrics["chip_w"]
-        scan_stage_chip.height = dp(40)
-        stage_top_left.add_widget(source_mode_chip)
-        stage_top_left.add_widget(scan_stage_chip)
-        scanner_fullscreen_layout.add_widget(stage_top_left)
-
-        device_chip = SurfaceBox(
-            orientation="horizontal",
-            size_hint=(None, None),
-            width=metrics["device_w"],
-            height=dp(42),
-            spacing=dp(6),
-            padding=(dp(10), dp(5)),
-            bg_color=tuple(list(ACCENT_2[:3]) + [0.40]),
-            border_color=tuple(list(ACCENT[:3]) + [0.32]),
-            radius=dp(21),
-            pos_hint={"right": 0.98, "top": 0.985},
-        )
-        device_chip.add_widget(Image(source=ui_asset("diagnostics"), size_hint=(None, 1), width=dp(18), allow_stretch=True, keep_ratio=True, opacity=0.82))
-        device_chip_label = DarkLabel(
-            text=f"[b]{html_escape(short_text(device_name, 28))}[/b]",
-            markup=True,
-            color=TEXT,
-            halign="center",
-            font_size=ui_font_px(10.8 if metrics["compact"] else 11.4, body=True),
-        )
-        device_chip.add_widget(device_chip_label)
-        scanner_fullscreen_layout.add_widget(device_chip)
+        scanner_stage.add_widget(camera_holder)
 
         auto_scan_result_panel = SurfaceBox(
             orientation="horizontal",
@@ -9183,7 +9577,6 @@ class YuGiOhApp(App):
             border_color=tuple(list(ACCENT[:3]) + [0.24]),
             radius=dp(22),
             elevation=2,
-            pos_hint={"x": 0.02, "y": 0.02},
             opacity=0,
             disabled=True,
         )
@@ -9216,18 +9609,41 @@ class YuGiOhApp(App):
         result_actions.add_widget(accept_btn)
         result_actions.add_widget(reject_btn)
         auto_scan_result_panel.add_widget(result_actions)
-        scanner_fullscreen_layout.add_widget(auto_scan_result_panel)
+        result_anchor = AnchorLayout(anchor_x="left", anchor_y="bottom", padding=metrics["pad"], size_hint=(1, 1))
+        result_anchor.add_widget(auto_scan_result_panel)
+        scanner_stage.add_widget(result_anchor)
 
-        source_menu_anchor = FloatLayout(size_hint=(1, 1))
-        scanner_fullscreen_layout.add_widget(source_menu_anchor)
+        # Eigenständiger Overlay-Layer: Der Scrim ist geschlossen deaktiviert und
+        # vollständig unsichtbar; geöffnet schließt ein Tipp außerhalb das Menü.
+        source_menu_overlay = FloatLayout(size_hint=(1, 1))
+        source_menu_scrim = Button(
+            text="",
+            background_normal="",
+            background_down="",
+            background_color=(0.0, 0.0, 0.0, 0.28),
+            size_hint=(1, 1),
+            opacity=0,
+            disabled=True,
+        )
+        source_menu_overlay.add_widget(source_menu_scrim)
+        source_menu_anchor = AnchorLayout(anchor_x="right", anchor_y="bottom", padding=metrics["pad"], size_hint=(1, 1))
+        source_menu_stack = GridLayout(
+            cols=1,
+            size_hint=(None, None),
+            width=metrics["source_bubble_w"],
+            height=metrics["bubble_h"],
+            spacing=0,
+        )
+        source_menu_anchor.add_widget(source_menu_stack)
+        source_menu_overlay.add_widget(source_menu_anchor)
+        scanner_stage.add_widget(source_menu_overlay)
         source_menu_live_bubble = DarkButton(
             text="Live",
             bg=ACCENT_2,
             radius=dp(24),
             size_hint=(None, None),
-            width=metrics["source_bubble_w"],
-            height=metrics["bubble_h"],
-            pos_hint={"right": 0.98, "y": 0.22},
+            width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
+            height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
@@ -9236,9 +9652,8 @@ class YuGiOhApp(App):
             bg=ACCENT,
             radius=dp(24),
             size_hint=(None, None),
-            width=metrics["source_bubble_w"],
-            height=metrics["bubble_h"],
-            pos_hint={"right": 0.98, "y": 0.14},
+            width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
+            height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
@@ -9247,9 +9662,8 @@ class YuGiOhApp(App):
             bg=GOLD,
             radius=dp(24),
             size_hint=(None, None),
-            width=metrics["source_bubble_w"],
-            height=metrics["bubble_h"],
-            pos_hint={"right": 0.98, "y": 0.06},
+            width=0 if metrics["menu_mode"] == "horizontal" else metrics["source_bubble_w"],
+            height=metrics["bubble_h"] if metrics["menu_mode"] == "horizontal" else 0,
             opacity=0,
             disabled=True,
         )
@@ -9260,18 +9674,26 @@ class YuGiOhApp(App):
             size_hint=(None, None),
             width=metrics["source_bubble_w"],
             height=metrics["bubble_h"],
-            pos_hint={"right": 0.98, "y": 0.02},
             bold=True,
         )
+        # Reihenfolge: Live/Kamera oben bzw. links, der Quellen-Schalter unten
+        # rechts. Im geschlossenen Zustand besitzen nur dessen Zelle und Größe.
         for bubble in (source_menu_live_bubble, source_menu_camera_bubble, source_menu_gallery_bubble, bubble_source_menu):
-            source_menu_anchor.add_widget(bubble)
+            source_menu_stack.add_widget(bubble)
+
+        def set_source_launcher_visible(visible=True):
+            visible = bool(visible)
+            if not visible:
+                source_menu_state["open"] = False
+            bubble_source_menu.opacity = 1 if visible else 0
+            bubble_source_menu.disabled = not visible
 
         def set_stage_state(text, accent=None):
             label = str(text or "Bereit")
             scan_state["status"] = label
             self.set_status(label)
             try:
-                scan_stage_chip.label.text = short_text(label, 18)
+                scan_stage_chip.label.text = short_text(label, 64)
                 scan_stage_chip.chip_accent = accent or scan_stage_chip.chip_accent
                 scan_stage_chip.set_active(True)
             except Exception:
@@ -9287,6 +9709,8 @@ class YuGiOhApp(App):
                 pass
 
         def show_result_panel(best, quality=None):
+            toggle_source_bubbles(False)
+            set_source_launcher_visible(False)
             card = (best or {}).get("card") or {}
             set_item = (best or {}).get("set_item") or {}
             title = str(card.get("name") or "Unbekannte Karte")
@@ -9317,6 +9741,7 @@ class YuGiOhApp(App):
         def hide_result_panel(reset_text=True):
             auto_scan_result_panel.opacity = 0
             auto_scan_result_panel.disabled = True
+            set_source_launcher_visible(True)
             result_title.text = ""
             result_meta.text = ""
             result_detail.text = ""
@@ -9347,7 +9772,7 @@ class YuGiOhApp(App):
                 return ""
             try:
                 os.makedirs(self.user_data_dir, exist_ok=True)
-                adjusted_photo_path = os.path.join(self.user_data_dir, f"scan_frame_{time.strftime('%Y%m%d_%H%M%S')}.png")
+                adjusted_photo_path = os.path.join(self.user_data_dir, "scan_frame_latest.png")
                 photo_clip.export_to_png(adjusted_photo_path)
                 self.last_scan_photo = adjusted_photo_path
                 return adjusted_photo_path
@@ -9360,9 +9785,15 @@ class YuGiOhApp(App):
                 return ""
             try:
                 os.makedirs(self.user_data_dir, exist_ok=True)
-                live_path = os.path.join(self.user_data_dir, f"scan_live_{time.strftime('%Y%m%d_%H%M%S')}.png")
+                now = time.monotonic()
+                cached_path = str(live_capture_state.get("path") or "")
+                if now - float(live_capture_state.get("last_at") or 0.0) < 0.70 and cached_path and os.path.exists(cached_path):
+                    return cached_path
+                live_path = os.path.join(self.user_data_dir, "scan_live_latest.png")
                 live_outer.export_to_png(live_path)
                 if live_path and os.path.exists(live_path) and os.path.getsize(live_path) > 0:
+                    live_capture_state["last_at"] = now
+                    live_capture_state["path"] = live_path
                     return live_path
             except Exception:
                 return ""
@@ -9417,21 +9848,35 @@ class YuGiOhApp(App):
                     fw = max(1, outer.width)
                     fh = max(1, outer.height)
                     ox, oy = outer.pos
-                    photo_clip.size = (fw, fh)
-                    photo_clip.pos = (ox, oy)
-                    photo_scatter.size = (fw, fh)
+                    rel_x, rel_y, card_w, card_h = card_frame_geometry_v110(
+                        fw, fh, margin_ratio=0.045, minimum_margin=dp(7),
+                        maximum_width_ratio=0.94, maximum_height_ratio=0.96,
+                    )
+                    card_x = ox + rel_x
+                    card_y = oy + rel_y
+                    photo_clip.size = (card_w, card_h)
+                    photo_clip.pos = (card_x, card_y)
+                    photo_scatter.size = (card_w, card_h)
+                    photo_scatter.pos = (card_x, card_y)
+                    photo_scatter.center = (card_x + card_w / 2.0, card_y + card_h / 2.0)
                     if not getattr(photo_scatter, "_just_incard_initialized", False):
-                        photo_scatter.pos = (ox, oy)
-                        photo_scatter.center = (ox + fw / 2.0, oy + fh / 2.0)
                         photo_scatter.scale = 1.0
                         photo_scatter._just_incard_initialized = True
-                    photo_image.size = (fw, fh)
-                    photo_image.pos = (0, 0)
+                    texture = getattr(photo_image, "texture", None)
+                    try:
+                        source_w, source_h = map(float, texture.size if texture is not None else (card_w, card_h))
+                    except Exception:
+                        source_w, source_h = card_w, card_h
+                    image_x, image_y, image_w, image_h = cover_geometry_v110(
+                        source_w, source_h, card_w, card_h, rotated=False,
+                    )
+                    photo_image.size = (image_w, image_h)
+                    photo_image.pos = (image_x, image_y)
                     try:
                         photo_image.keep_ratio = True
                         photo_image.allow_stretch = True
                         if hasattr(photo_image, "fit_mode"):
-                            photo_image.fit_mode = "contain"
+                            photo_image.fit_mode = "cover"
                     except Exception:
                         pass
                     try:
@@ -9440,12 +9885,6 @@ class YuGiOhApp(App):
                             gl.points = []
                     except Exception:
                         pass
-                    rel_x, rel_y, card_w, card_h = card_frame_geometry_v110(
-                        fw, fh, margin_ratio=0.055, minimum_margin=dp(8),
-                        maximum_width_ratio=0.92, maximum_height_ratio=0.94,
-                    )
-                    card_x = ox + rel_x
-                    card_y = oy + rel_y
                     guide_line.rounded_rectangle = (card_x, card_y, card_w, card_h, dp(16))
                     title_y_bot = card_y + card_h - card_h * 0.105
                     picture_y_bot = title_y_bot - card_h * 0.39
@@ -9480,6 +9919,7 @@ class YuGiOhApp(App):
             live_frame_ref["widget"] = None
             live_clip_ref["widget"] = None
             live_fit_callback["callback"] = None
+            live_fit_state["signature"] = None
 
         def pause_live_preview():
             try:
@@ -9577,6 +10017,14 @@ class YuGiOhApp(App):
                             src_w, src_h = map(float, getattr(cam, "resolution", (640, 480)))
                         except Exception:
                             src_w, src_h = 640.0, 480.0
+                    geometry_signature = (
+                        round(float(ox), 1), round(float(oy), 1),
+                        round(float(fw), 1), round(float(fh), 1),
+                        round(float(src_w), 1), round(float(src_h), 1), rotation,
+                    )
+                    if geometry_signature == live_fit_state.get("signature"):
+                        return
+                    live_fit_state["signature"] = geometry_signature
                     cam_x, cam_y, cam_w, cam_h = cover_geometry_v110(
                         src_w, src_h, card_w, card_h, rotated=rotation in (90, 270)
                     )
@@ -9610,15 +10058,44 @@ class YuGiOhApp(App):
                 return False
 
         def toggle_source_bubbles(force=None):
+            if scan_state.get("result") is not None and force is not False:
+                return False
             open_state = (not source_menu_state["open"]) if force is None else bool(force)
             source_menu_state["open"] = open_state
-            for bubble in (source_menu_live_bubble, source_menu_camera_bubble, source_menu_gallery_bubble):
+            menu_mode = str(metrics.get("menu_mode") or "vertical")
+            horizontal = menu_mode == "horizontal"
+            grid_mode = menu_mode == "grid"
+            menu_bubbles = (source_menu_live_bubble, source_menu_camera_bubble, source_menu_gallery_bubble)
+            source_menu_stack.cols = 4 if open_state and horizontal else (2 if open_state and grid_mode else 1)
+            source_menu_stack.spacing = metrics["gap"] if open_state else 0
+            for bubble in menu_bubbles:
+                if horizontal or grid_mode:
+                    bubble.width = metrics["source_bubble_w"] if open_state else 0
+                    bubble.height = metrics["bubble_h"] if open_state else 0
+                else:
+                    bubble.width = metrics["source_bubble_w"]
+                    bubble.height = metrics["bubble_h"] if open_state else 0
+                # Opacity zuerst setzen: DarkButton respektiert seit v11.3.0
+                # explizit unsichtbare deaktivierte Overlay-Elemente.
                 bubble.opacity = 1 if open_state else 0
                 bubble.disabled = not open_state
+            if horizontal:
+                source_menu_stack.width = metrics["source_bubble_w"] * (4 if open_state else 1) + metrics["gap"] * (3 if open_state else 0)
+                source_menu_stack.height = metrics["bubble_h"]
+            elif grid_mode:
+                source_menu_stack.width = metrics["source_bubble_w"] * (2 if open_state else 1) + metrics["gap"] * (1 if open_state else 0)
+                source_menu_stack.height = metrics["bubble_h"] * (2 if open_state else 1) + metrics["gap"] * (1 if open_state else 0)
+            else:
+                source_menu_stack.width = metrics["source_bubble_w"]
+                source_menu_stack.height = metrics["bubble_h"] * (4 if open_state else 1) + metrics["gap"] * (3 if open_state else 0)
+            source_menu_scrim.opacity = 1 if open_state else 0
+            source_menu_scrim.disabled = not open_state
             bubble_source_menu.text = "Schließen" if open_state else "Quellen"
             return open_state
 
         self._toggle_scanner_source_bubbles = toggle_source_bubbles
+        self._scanner_source_menu_is_open = lambda: bool(source_menu_state.get("open"))
+        source_menu_scrim.bind(on_release=lambda *_: toggle_source_bubbles(False))
 
         def get_android_picture_dir():
             candidates = []
@@ -9902,9 +10379,9 @@ class YuGiOhApp(App):
             scan_state["token"] += 1
             token = scan_state["token"]
             set_stage_state("Suche läuft", ACCENT)
-            quality = self.analyze_scan_image_quality(path)
             current_config = self.scan_mode_config()
             deadline = ScanDeadlineV100.start(float(current_config.get("hard_timeout_seconds") or 10.0))
+            quality_holder = {"value": None}
 
             def finalize(best=None, error="", alternatives=None):
                 def on_ui(*_):
@@ -9914,13 +10391,15 @@ class YuGiOhApp(App):
                     if best:
                         scan_state["result"] = best
                         scan_state["alternatives"] = alternatives or []
-                        show_result_panel(best, quality=quality)
+                        show_result_panel(best, quality=quality_holder.get("value"))
                     else:
                         scan_state["result"] = None
                         scan_state["alternatives"] = []
                         hide_result_panel(reset_text=False)
                         set_stage_state(error or "Keine Karte erkannt – erneuter Versuch", ACCENT)
-                        schedule_auto_scan(0.95 if scan_state.get("source") == "live" else 1.25)
+                        perf_key = str(current_config.get("performance_mode") or "balanced")
+                        live_delay = 1.45 if perf_key == "eco" else (1.20 if perf_key == "balanced" else 1.05)
+                        schedule_auto_scan(live_delay if scan_state.get("source") == "live" else 1.45)
                 Clock.schedule_once(on_ui, 0)
 
             def after_ocr(text, error=""):
@@ -9933,8 +10412,8 @@ class YuGiOhApp(App):
                         best, _tried, alternatives = self._find_scan_matches_for_candidates(
                             candidates,
                             scan_path=path,
-                            quality=quality,
-                            include_artwork=True,
+                            quality=quality_holder.get("value"),
+                            include_artwork=bool(current_config.get("artwork", True)),
                             max_alternatives=3,
                             deadline_at=deadline.deadline_at,
                         )
@@ -9943,12 +10422,27 @@ class YuGiOhApp(App):
                     finalize(best, err, alternatives)
                 threading.Thread(target=resolve_worker, daemon=True).start()
 
-            self.smart_ocr_scan_image(
-                path,
-                after_ocr,
-                max_variant_images=int(current_config.get("guided_variants") or 0),
-                deadline_at=deadline.deadline_at,
-            )
+            # Helligkeit/Kontrast/Schärfe lesen Bilddaten. Das lief zuvor direkt
+            # im Kivy-UI-Thread und verursachte beim Live-Scan sichtbare Hänger.
+            def quality_worker():
+                try:
+                    quality_holder["value"] = self.analyze_scan_image_quality(path)
+                except Exception:
+                    quality_holder["value"] = None
+
+                def launch_ocr(*_):
+                    if token != scan_state.get("token") or getattr(self, "_current_section", "") != "scanner":
+                        return
+                    self.smart_ocr_scan_image(
+                        path,
+                        after_ocr,
+                        max_variant_images=int(current_config.get("guided_variants") or 0),
+                        deadline_at=deadline.deadline_at,
+                    )
+
+                Clock.schedule_once(launch_ocr, 0)
+
+            threading.Thread(target=quality_worker, daemon=True).start()
             return True
 
         def accept_current_result(*_):
@@ -9979,23 +10473,33 @@ class YuGiOhApp(App):
 
         def resize_scanner(*_):
             nonlocal metrics
+            was_open = bool(source_menu_state.get("open"))
             metrics = scanner_metrics()
             content.padding = metrics["pad"]
+            content.spacing = metrics["gap"]
+            scanner_fullscreen_layout.spacing = metrics["gap"]
+            scanner_header.height = metrics["bubble_h"] * 2 + metrics["gap"] + dp(12)
+            scanner_header.spacing = metrics["gap"]
+            scanner_header_primary.height = metrics["bubble_h"]
+            scanner_header_primary.spacing = metrics["gap"]
+            source_mode_chip.width = metrics["source_chip_w"]
+            source_mode_chip.height = metrics["bubble_h"]
+            device_chip.height = metrics["bubble_h"]
+            scan_stage_chip.height = metrics["bubble_h"]
             auto_scan_result_panel.width = metrics["result_w"]
             auto_scan_result_panel.height = metrics["result_h"]
-            device_chip.width = metrics["device_w"]
-            source_mode_chip.width = metrics["chip_w"]
-            scan_stage_chip.width = metrics["chip_w"]
-            for bubble in (bubble_source_menu, source_menu_live_bubble, source_menu_camera_bubble, source_menu_gallery_bubble):
-                bubble.width = metrics["source_bubble_w"]
-                bubble.height = metrics["bubble_h"]
-            stage_top_left.width = dp(252 if metrics["compact"] else 272)
-            result_thumb_box.width = dp(72 if metrics["compact"] else 82)
-            result_thumb_box.height = dp(98 if metrics["compact"] else 112)
+            result_anchor.padding = metrics["pad"]
+            source_menu_anchor.padding = metrics["pad"]
+            bubble_source_menu.width = metrics["source_bubble_w"]
+            bubble_source_menu.height = metrics["bubble_h"]
+            thumb_h = max(dp(76), metrics["result_h"] - dp(16))
+            result_thumb_box.height = thumb_h
+            result_thumb_box.width = max(dp(54), thumb_h / 1.45)
             device_chip_label.font_size = ui_font_px(10.8 if metrics["compact"] else 11.4, body=True)
             result_title.font_size = ui_font_px(13.4 if metrics["compact"] else 14.0)
             result_meta.font_size = ui_font_px(10.0 if metrics["compact"] else 10.6, body=True)
             result_detail.font_size = ui_font_px(9.8 if metrics["compact"] else 10.2, body=True)
+            toggle_source_bubbles(was_open)
             try:
                 callback = live_fit_callback.get("callback")
                 if callable(callback):
@@ -10009,21 +10513,39 @@ class YuGiOhApp(App):
             except Exception:
                 pass
 
-        Window.bind(size=resize_scanner)
+        def schedule_resize_scanner(*_):
+            previous = scanner_resize_event.get("event")
+            if previous is not None:
+                try:
+                    previous.cancel()
+                except Exception:
+                    pass
+            scanner_resize_event["event"] = Clock.schedule_once(resize_scanner, 0.08)
+
+        Window.bind(size=schedule_resize_scanner)
 
         def stop_and_restore(*_):
             cancel_auto_scan()
+            toggle_source_bubbles(False)
             self._scanner_resume_callback = None
             self._toggle_scanner_source_bubbles = None
+            self._scanner_source_menu_is_open = None
             stop_live_preview()
+            pending_resize = scanner_resize_event.get("event")
+            if pending_resize is not None:
+                try:
+                    pending_resize.cancel()
+                except Exception:
+                    pass
             try:
-                Window.unbind(size=resize_scanner)
+                Window.unbind(size=schedule_resize_scanner)
             except Exception:
                 pass
             Clock.schedule_once(lambda *__: set_android_screen_orientation("unspecified"), 0.25)
 
         popup.bind(on_dismiss=stop_and_restore)
         popup.open()
+        Clock.schedule_once(resize_scanner, 0)
         Clock.schedule_once(lambda *_: choose_live(), 0.12)
 
     def set_scan_mode(self, mode, show_popup=True):
@@ -10046,7 +10568,7 @@ class YuGiOhApp(App):
         lines = [
             "Scanner-Zeiten pro einzelner Kartenfläche",
             "",
-            "KI-Ensemble v11.2.3: " + model_stack_summary(),
+            "KI-Ensemble v11.3.0: " + model_stack_summary(),
             "",
             "Die Zielwerte gelten bei installierter lokaler Kartendatenbank. ",
             "Große/unscharfe Bilder und der erste Modellstart können länger dauern.",
@@ -10416,7 +10938,7 @@ class YuGiOhApp(App):
         return output
 
     def detect_card_regions(self, path, max_cards=64):
-        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v11.2.3.
+        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v11.3.0.
 
         YOLO, MediaPipe, native/Python-OpenCV und der bisherige Pillow-Pfad
         stimmen gemeinsam über jede Kartenfläche ab. Die Resultate werden per
@@ -13113,7 +13635,7 @@ class YuGiOhApp(App):
         results = list(results or [])
         errors = list(errors or [])
 
-        # v11.2.3: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
+        # v11.3.0: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
         # Galerie-Import bleibt als eigenständiger Prüfeintrag mit genau seinem
         # Vorschaubild, Scan-Crop, Artwork und seinen Kandidaten erhalten.
         grouped_results = []
@@ -15071,11 +15593,19 @@ class YuGiOhApp(App):
             card = SurfaceBox(orientation="vertical", padding=dp(8), spacing=dp(7), size_hint_y=None, bg_color=CARD_BG)
             card.bind(minimum_height=card.setter("height"))
             card.add_widget(DarkLabel(text=f"[b]{html_escape(title)}[/b]\n[color={markup_hex(MUTED)}]{html_escape(subtitle)}[/color]", markup=True, size_hint_y=None, height=dp(48)))
-            cols = 1 if self.ui_width_below(560) else 2
-            grid = GridLayout(cols=cols, spacing=dp(7), size_hint_y=None)
+            grid = GridLayout(cols=1, spacing=dp(7), size_hint_y=None)
             grid.bind(minimum_height=grid.setter("height"))
             for label, bg, fn, close in entries:
                 grid.add_widget(DarkButton(text=label, bg=bg, size_hint_y=None, height=dp(50), on_release=run_and_close(fn, close)))
+            self.bind_adaptive_grid(
+                grid,
+                len(entries),
+                min_item_dp=245,
+                max_cols=2,
+                min_cols=1,
+                row_height=dp(50),
+                gap_px=dp(7),
+            )
             card.add_widget(grid)
             body.add_widget(card)
 
@@ -15282,8 +15812,8 @@ class YuGiOhApp(App):
     def export_backup_zip(self, *_):
         """Erstellt ein konsistentes ZIP-Backup der wichtigen Nutzerdaten."""
         try:
-            self.save_collection(show_popup=False)
-            self.save_decks()
+            self.save_collection(show_popup=False, immediate=True)
+            self.save_decks(immediate=True)
             self.save_settings()
             self.save_scan_history()
             self.save_session_state(show_popup=False)

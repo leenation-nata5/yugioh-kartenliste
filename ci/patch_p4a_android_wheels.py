@@ -17,13 +17,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-MARKER = "Just InCard Android wheel staging hotfix v11.2.3"
+MARKER = "Just InCard Android wheel staging hotfix v11.3.0"
 OLD = '''            shprint(sh.bash, '-c', (
                 "venv/bin/pip " +
                 "install -v --target '{0}' --no-deps -r requirements.txt"
             ).format(ctx.get_site_packages_dir(arch).replace("'", "'\\\"'\\\"'")),
                     _env=copy.copy(env))'''
-NEW = '''            # Just InCard Android wheel staging hotfix v11.2.3
+NEW = '''            # Just InCard Android wheel staging hotfix v11.3.0
             # The dependency resolver above already chose Android-compatible
             # wheels.  Keep the same target platform when staging them into the
             # app's site-packages; otherwise host pip rejects PEP 738 Android
