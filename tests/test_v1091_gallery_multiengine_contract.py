@@ -18,8 +18,8 @@ def run():
         stable_region_session_id,
     )
 
-    assert APP_VERSION == "11.2.2"
-    assert APP_BUILD == 1122
+    assert APP_VERSION == "11.2.3"
+    assert APP_BUILD == 1123
     assert len(GALLERY_MULTI_ENGINE_PLAN_V1093) == 8
     for name in (
         "YOLOv8/YOLO11 Nano", "Google MediaPipe", "Google ML Kit Vision OCR",
@@ -74,10 +74,10 @@ def run():
 
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     assert "tests/test_v1091_gallery_multiengine_contract.py" in workflow
-    assert "just-incard-v1122-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
 
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_2.txt"]
-    print("v11.2.2 gallery multi-engine contract tests: OK")
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v11_2_3.txt"]
+    print("v11.2.3 gallery multi-engine contract tests: OK")
 
 
 if __name__ == "__main__":

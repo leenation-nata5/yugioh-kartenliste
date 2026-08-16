@@ -1,4 +1,4 @@
-# Just InCard v11.2.2 – KI-Modellarchitektur
+# Just InCard v11.2.3 – KI-Modellarchitektur
 
 Programmierer/Admin: **leenation**
 
@@ -49,6 +49,6 @@ Ein Kartenname oder Artwork darf einen exakten Set-Code- oder Passcode-Treffer n
 
 Framework-Lizenzen und Modelllizenzen sind getrennt zu prüfen. Das optionale externe YOLO-TCG-Modell wird nur über das Vorbereitungsskript geladen; vor einer öffentlichen Weiterverteilung muss seine konkrete Modelllizenz geprüft werden.
 
-## Galerie-Ordnerseiten in v11.2.2
+## Galerie-Ordnerseiten in v11.2.3
 
 Die Galerie-Erkennung fusioniert YOLO-, MediaPipe-, OpenCV- und Pillow-Boxen. Jede resultierende Kartenfläche wird danach separat mit ML Kit und optional PaddleOCR/EasyOCR gelesen. ORB, AKAZE und MobileNetV3 bestätigen das Artwork; MiniLM beziehungsweise der lokale semantische Fallback prüft Effekttexte.

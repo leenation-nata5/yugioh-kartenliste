@@ -1,6 +1,12 @@
 Programmierer / Administrator: leenation
 
-# Just InCard v11.2.2
+
+
+## APK-Build-Hotfix v11.2.3
+
+Der GitHub-Workflow lädt python-for-android vor dem Build vor und wendet `ci/patch_p4a_android_wheels.py` an. Der Hotfix erhält beim finalen Pure-Python-Staging die Android-Zielplattform und Ziel-Python-Version, damit Android-spezifische Wheels wie `charset_normalizer` nicht von Host-pip als inkompatibel verworfen werden. Der Patch ist strikt und idempotent und wird durch `tests/test_v1123_p4a_android_wheel_contract.py` abgesichert.
+
+# Just InCard v11.2.3
 
 Vollständiges Android-/Kivy-Projekt mit KI-Scanner, Sammlung, Deckverwaltung und automatischer Smartphone-/Tablet-Anpassung.
 
@@ -35,7 +41,7 @@ Vollständiges Android-/Kivy-Projekt mit KI-Scanner, Sammlung, Deckverwaltung un
 
 Die App nutzt eine gemeinsame APK und erkennt das Gerät automatisch anhand der verfügbaren dp-Breite, Pixeldichte, Ausrichtung, Schriftgröße und sicheren Systemränder. Smartphones verwenden Bottom-Navigation und einspaltige Seiten. Tablets verwenden bei ausreichender Breite Seitenleiste, mehr Spalten und größere Vorschau-/Scannerflächen.
 
-## Oberfläche v11.2.2
+## Oberfläche v11.2.3
 
 - zentrales responsives Designsystem in `ui_v110.py`
 - moderne Startseite, Suche, Ergebniskarten, Kartendetails, Scanner, Sammlung und Deckansichten
@@ -49,9 +55,9 @@ Die Release-Konfiguration nutzt Signierung, Zipalign, SHA-256, privaten App-Spei
 
 ## Aktuelle Dokumentation
 
-Nur `CHANGELOG_v11_2_2.txt` enthält die Änderungen der aktuellen Version.
+Nur `CHANGELOG_v11_2_3.txt` enthält die Änderungen der aktuellen Version.
 
-## Galerie-Multi-Engine-Pipeline in v11.2.2
+## Galerie-Multi-Engine-Pipeline in v11.2.3
 
 - YOLO, MediaPipe, OpenCV und Pillow liefern getrennte Kartenrahmen-Kandidaten.
 - Überlappende Erkennungen werden per gewichteter Box-Fusion zu einer Kartenfläche zusammengeführt.

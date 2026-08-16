@@ -162,8 +162,9 @@ jobs:
           python3 tests/test_v1101_java_hotfix_contract.py 2>&1 | tee logs/test_v1101_java_hotfix_contract.log
           python3 tests/test_v1102_gradle_memory_contract.py 2>&1 | tee logs/test_v1102_gradle_memory_contract.log
           python3 tests/test_v112_scanner_ui_contract.py 2>&1 | tee logs/test_v112_scanner_ui_contract.log
-          python3 tests/test_v1122_ci_legacy_contract_hotfix.py 2>&1 | tee logs/test_v1122_ci_legacy_contract_hotfix.log
-          python3 tests/test_v1122_repository_overlay_contract.py 2>&1 | tee logs/test_v1122_repository_overlay_contract.log
+          python3 tests/test_v1123_ci_legacy_contract_hotfix.py 2>&1 | tee logs/test_v1123_ci_legacy_contract_hotfix.log
+          python3 tests/test_v1123_repository_overlay_contract.py 2>&1 | tee logs/test_v1123_repository_overlay_contract.log
+          python3 tests/test_v1123_p4a_android_wheel_contract.py 2>&1 | tee logs/test_v1123_p4a_android_wheel_contract.log
 
       - name: Freien Speicher vorbereiten
         shell: bash
@@ -179,9 +180,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .buildozer_home
-          key: just-incard-v1122-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
+          key: just-incard-v1123-arm64-api35-ndk25b-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'app_version.py') }}
           restore-keys: |
-            just-incard-v1122-arm64-api35-ndk25b-${{ runner.os }}-
+            just-incard-v1123-arm64-api35-ndk25b-${{ runner.os }}-
 
       - name: Build-Verzeichnisse sauber vorbereiten
         shell: bash
@@ -206,6 +207,38 @@ jobs:
           docker pull "$BUILDOZER_IMAGE"
           docker image inspect "$BUILDOZER_IMAGE" --format '{{json .RepoDigests}}' \
             | tee logs/buildozer_image_digest.log
+
+      - name: python-for-android vorladen
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Buildozer klont p4a normalerweise erst innerhalb des langen APK-Builds.
+          # Wir laden es vorher, damit der Android-Wheel-Hotfix reproduzierbar
+          # angewendet und sofort geprüft werden kann.
+          docker run --rm \
+            --volume "$PWD":/home/user/hostcwd \
+            --volume "$PWD/.buildozer_home":/home/user/.buildozer \
+            --env BUILDOZER_WARN_ON_ROOT=0 \
+            "$BUILDOZER_IMAGE" \
+            android p4a -- --help 2>&1 | tee logs/p4a_prepare.log
+
+          P4A_BUILD=.buildozer/android/platform/python-for-android/pythonforandroid/build.py
+          test -s "$P4A_BUILD"
+          git -C .buildozer/android/platform/python-for-android rev-parse HEAD \
+            | tee logs/p4a_commit.log
+
+      - name: Android-Wheel-Staging-Hotfix anwenden
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          P4A_BUILD=.buildozer/android/platform/python-for-android/pythonforandroid/build.py
+          python3 ci/patch_p4a_android_wheels.py "$P4A_BUILD" \
+            | tee logs/p4a_android_wheel_patch.log
+
+          grep -F 'Just InCard Android wheel staging hotfix v11.2.3' "$P4A_BUILD"
+          grep -F -- '--only-binary=:all:' "$P4A_BUILD"
+          grep -F 'PyProjectRecipe.get_wheel_platform_tags(arch.arch, ctx)' "$P4A_BUILD"
+          grep -F -- '--python-version={2}' "$P4A_BUILD"
 
       - name: Debug-APK mit Buildozer bauen
         id: debug_build
@@ -233,6 +266,7 @@ jobs:
                 /\[INFO\]/ || /\[WARNING\]/ || /\[ERROR\]/ ||
                 /Traceback/ || /ImportError/ || /Command failed/ ||
                 /Buildozer failed/ || /Execution failed/ || /What went wrong/ ||
+                /not a supported wheel/ || /charset_normalizer/ ||
                 /Could not resolve/ || /Duplicate/ || /2 files found/ ||
                 /DexArchiveMergerException/ || /Program type already present/ ||
                 /Java heap space/ || /A failure occurred/ ||
@@ -247,7 +281,7 @@ jobs:
           sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
 
           grep -nEi \
-            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|ImportError|Traceback|No space left|Killed' \
+            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|not a supported wheel|charset_normalizer|ImportError|Traceback|No space left|Killed' \
             logs/buildozer_debug_full.log \
             | tail -n 400 > logs/buildozer_debug_errors.log || true
 
@@ -392,6 +426,7 @@ jobs:
                 /\[INFO\]/ || /\[WARNING\]/ || /\[ERROR\]/ ||
                 /Traceback/ || /ImportError/ || /Command failed/ ||
                 /Buildozer failed/ || /Execution failed/ || /What went wrong/ ||
+                /not a supported wheel/ || /charset_normalizer/ ||
                 /Could not resolve/ || /Duplicate/ || /2 files found/ ||
                 /DexArchiveMergerException/ || /Program type already present/ ||
                 /Java heap space/ || /A failure occurred/ ||
@@ -406,7 +441,7 @@ jobs:
           sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE" || true
 
           grep -nEi \
-            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|ImportError|Traceback|No space left|Killed' \
+            'FAILURE: Build failed|What went wrong|Execution failed for task|Caused by:|Manifest merger failed|Error parsing .*AndroidManifest|SAXParseException|Could not resolve|Duplicate class|More than one file was found|2 files found|DexArchiveMergerException|Program type already present|Java heap space|OutOfMemoryError|A failure occurred while executing|Command failed|Buildozer failed|not a supported wheel|charset_normalizer|ImportError|Traceback|No space left|Killed' \
             logs/buildozer_release_full.log \
             | tail -n 400 > logs/buildozer_release_errors.log || true
 

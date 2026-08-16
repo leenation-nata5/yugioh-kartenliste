@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Regressionstest für Scanner-, Galerie-, UI- und Erststart-Änderungen in v11.2.2."""
+"""Regressionstest für Scanner-, Galerie-, UI- und Erststart-Änderungen in v11.2.3."""
 from __future__ import annotations
 
 import json
@@ -16,8 +16,8 @@ def run():
     from scanner_v100 import gallery_scan_profile
     from gallery_multiengine_v1091 import bbox_containment, suppress_nested_regions
 
-    assert APP_VERSION == "11.2.2"
-    assert APP_BUILD == 1122
+    assert APP_VERSION == "11.2.3"
+    assert APP_BUILD == 1123
 
     profile = gallery_scan_profile()
     assert profile["max_attempts"] == 3
@@ -67,23 +67,23 @@ def run():
     assert 'if not os.environ.get("ANDROID_ARGUMENT")' not in native
 
     manifest = json.loads((ROOT / "models/ai_models_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["version"] == "11.2.2"
+    assert manifest["version"] == "11.2.3"
     engines = {item.get("id") for item in manifest.get("engines", [])}
     for engine in {"mlkit_text", "opencv_orb_akaze", "yolo_card_detector", "paddleocr", "mobilenet_v3_embedder"}:
         assert engine in engines
 
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
-    assert re.search(r"^version\s*=\s*11\.2\.2\s*$", spec, re.M)
-    assert "android.numeric_version = 1122" in spec
+    assert re.search(r"^version\s*=\s*11\.2\.3\s*$", spec, re.M)
+    assert "android.numeric_version = 1123" in spec
 
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     assert "tests/test_v112_scanner_ui_contract.py" in workflow
-    assert "just-incard-v1122-arm64-api35-ndk25b" in workflow
+    assert "just-incard-v1123-arm64-api35-ndk25b" in workflow
     assert "include_extended_ai_models" in workflow and "default: true" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v11_2_2.txt"], txt_files
-    print("v11.2.2 scanner/UI/first-launch contract tests: OK")
+    assert txt_files == ["CHANGELOG_v11_2_3.txt"], txt_files
+    print("v11.2.3 scanner/UI/first-launch contract tests: OK")
 
 
 if __name__ == "__main__":
