@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Responsive-/Stabilitätsvertrag für Just InCard v12.0.0."""
+"""Responsive-/Stabilitätsvertrag für Just InCard v12.0.1."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -24,8 +24,8 @@ def inside(rect, bounds, tolerance=1e-6):
 
 
 def run() -> None:
-    assert APP_VERSION == "12.0.0"
-    assert APP_BUILD == 1200
+    assert APP_VERSION == "12.0.1"
+    assert APP_BUILD == 1201
 
     devices = [
         ("tiny_split_square", 240, 240, False),
@@ -119,11 +119,11 @@ def run() -> None:
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
     assert "tests/test_v113_ui_performance_contract.py" in workflow
-    assert "just-incard-v1200-arm64-api35-ndk27c" in workflow
-    assert "version = 12.0.0" in spec
-    assert "android.numeric_version = 1200" in spec
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_0.txt"]
-    print("v12.0.0 responsive UI, scanner overlay and performance contracts: OK")
+    assert "just-incard-v1201-arm64-api35-ndk27c" in workflow
+    assert "version = 12.0.1" in spec
+    assert "android.numeric_version = 1201" in spec
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_1.txt"]
+    print("v12.0.1 responsive UI, scanner overlay and performance contracts: OK")
 
 
 if __name__ == "__main__":

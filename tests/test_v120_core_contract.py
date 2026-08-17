@@ -142,7 +142,7 @@ def run() -> None:
         assert [point["price"] for point in latest] == [12.0, 13.0, 14.0]
         assert database.integrity_check() is True
 
-    print("v12.0.0 core/migration/offline-pack contract tests: OK")
+    print("v12.0.1 core/migration/offline-pack contract tests: OK")
 
 
 if __name__ == "__main__":

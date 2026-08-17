@@ -10,16 +10,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def run() -> None:
-    assert sorted(path.name for path in ROOT.glob("CHANGELOG_v*.txt")) == ["CHANGELOG_v12_0_0.txt"]
+    assert sorted(path.name for path in ROOT.glob("CHANGELOG_v*.txt")) == ["CHANGELOG_v12_0_1.txt"]
     required = (
         "README.md",
-        "CHANGELOG_v12_0_0.txt",
+        "CHANGELOG_v12_0_1.txt",
         "UI_V120_DESIGN.md",
         "docs/OFFLINE_DELTA_PACK_V120.md",
         "docs/TESTMATRIX_V120.md",
         "docs/DATENSCHUTZ_V120.md",
         "tests/fixtures/scan_corpus/manifest.example.json",
         "scripts/scan_benchmark_v120.py",
+        "ci/verify_android_python_packages.py",
+        "tests/test_v1201_android_build_fix.py",
         "assets/ui/scanner_surface_v120.webp",
     )
     for name in required:
@@ -35,8 +37,11 @@ def run() -> None:
         "tests/test_v120_responsive_fuzz.py",
         "tests/test_v120_android_scanner_contract.py",
         "tests/test_v120_release_contract.py",
+        "tests/test_v1201_android_build_fix.py",
+        "ci/verify_android_python_packages.py",
+        "EXPECTED_P4A_COMMIT",
         "kivy/buildozer@sha256:",
-        "just-incard-v1200-arm64-api35-ndk27c",
+        "just-incard-v1201-arm64-api35-ndk27c",
     ):
         assert fragment in workflow, fragment
 
@@ -48,9 +53,13 @@ def run() -> None:
         "scanner_surface_v120.webp",
         "SecureSecretStore.java",
         "SecureBackupCipher.java",
-        "CHANGELOG_v12_0_0.txt",
+        "CHANGELOG_v12_0_1.txt",
     ):
         assert fragment in preflight, fragment
+
+    spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
+    assert "charset_normalizer==3.4.9" in spec
+    assert "ci/patch_p4a_android_wheels.py" not in workflow
     integrity = json.loads((ROOT / "security_integrity_manifest.json").read_text(encoding="utf-8"))
     protected = set(integrity.get("files") or {})
     assert "features_v120.py" in protected
@@ -69,7 +78,7 @@ def run() -> None:
                 unsafe_callbacks.append((handler.lineno, callback.lineno, handler.name))
     assert unsafe_callbacks == [], unsafe_callbacks
     assert main_source.count("self.app_db.checkpoint()") >= 3
-    print("v12.0.0 release/documentation/CI contract tests: OK")
+    print("v12.0.1 release/documentation/CI contract tests: OK")
 
 
 if __name__ == "__main__":

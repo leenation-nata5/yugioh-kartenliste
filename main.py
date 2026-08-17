@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Just InCard v12.0.0 für Android/Kivy
+Just InCard v12.0.1 für Android/Kivy
 - schnelle Kartensuche über YGOPRODeck API v7
 - deutsche Suche als Standard, Sprache auswählbar
 - Sammlung/Decks/Einstellungen primär in SQLite, JSON als kompatible Sicherung
@@ -9,7 +9,7 @@ Just InCard v12.0.0 für Android/Kivy
 - Light/Dark Theme Umschalter
 - seitenweise Ergebnisanzeige für mehr Stabilität bei vielen Treffern
 - App-Logo über app_logo.png personalisierbar
-- scannerzentrierte v12.0.0-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
+- scannerzentrierte v12.0.1-KI-Ensemble-Pipeline mit Zeitbudgets, lokaler Sofortsuche, Bildqualitaetspruefung,
   Mehrkarten-/Artwork-Fallback und geräteadaptiven Vollseiten-Prüfansichten
 """
 
@@ -183,7 +183,7 @@ from kivy.uix.recycleview import RecycleView
 from kivy.uix.recycleboxlayout import RecycleBoxLayout
 from kivy.uix.recycleview.views import RecycleDataViewBehavior
 
-# KI-Scanner v12.0.0: lokaler Modellstapel fuer Galerie-Genauigkeit
+# KI-Scanner v12.0.1: lokaler Modellstapel fuer Galerie-Genauigkeit
 API_URL = "https://db.ygoprodeck.com/api/v7/cardinfo.php"
 CARDSETS_URL = "https://db.ygoprodeck.com/api/v7/cardsets.php"
 CARDSETS_CACHE = None
@@ -423,7 +423,7 @@ def get_android_screen_metrics_snapshot():
 
 
 def build_ui_profile(metrics=None, window_size=None):
-    """Erstellt das zentrale v12.0.0-UI-Profil für Android-Fenster jeder Größe.
+    """Erstellt das zentrale v12.0.1-UI-Profil für Android-Fenster jeder Größe.
 
     Die eigentliche Breakpoint-Logik liegt in :mod:`ui_v110` und wird dort ohne
     Kivy-Abhängigkeit gegen viele Smartphone-/Tabletgrößen getestet. Android-
@@ -4821,7 +4821,7 @@ class YuGiOhApp(App):
                 self.show_home_page()
 
     def show_home_page(self, *_):
-        """Moderne v12.0.0-Startseite mit klaren Aktionen und sicheren Höhen."""
+        """Moderne v12.0.1-Startseite mit klaren Aktionen und sicheren Höhen."""
         current = getattr(self, "_active_inline_page", None)
         if current is not None:
             self._close_inline_page(current, navigate=False)
@@ -5304,10 +5304,10 @@ class YuGiOhApp(App):
             if not result.get("ok"):
                 self.append_crash_log(
                     "Integritätsabweichung: " + json.dumps(result, ensure_ascii=False),
-                    "Security v12.0.0",
+                    "Security v12.0.1",
                 )
         except Exception as exc:
-            self.append_crash_log(exc, "Security v12.0.0")
+            self.append_crash_log(exc, "Security v12.0.1")
 
     def load_settings(self):
         data = {}
@@ -6607,7 +6607,7 @@ class YuGiOhApp(App):
                 self.append_crash_log(exc, "responsive_inline_page")
 
     def apply_responsive_layout(self, force=False):
-        """Legt die v12.0.0-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
+        """Legt die v12.0.1-Oberfläche anhand der nutzbaren Fensterbreite neu aus.
 
         Wichtig ist nicht die physische Pixelzahl, sondern die Breite in dp. Damit
         sehen verschiedene Smartphones nebeneinander nahezu gleich aus, während
@@ -6747,7 +6747,7 @@ class YuGiOhApp(App):
             self.tablet_dashboard.opacity = 0
             self.tablet_dashboard.disabled = True
 
-            # Suchkarte: Spalten folgen dem zentral getesteten v12.0.0-Profil.
+            # Suchkarte: Spalten folgen dem zentral getesteten v12.0.1-Profil.
             search_cols = max(1, int(profile.get("search_columns") or 1))
             self.search_panel.cols = search_cols
             self.search_panel.spacing = gap
@@ -9866,7 +9866,7 @@ class YuGiOhApp(App):
             fallback_picker(str(exc))
 
     def open_camera_scanner(self):
-        """Vollflächiger Live-Scanner v12.0.0 mit automatischer Erkennung.
+        """Vollflächiger Live-Scanner v12.0.1 mit automatischer Erkennung.
 
         - Die Live-Fläche füllt den verfügbaren Bildschirm responsiv für Smartphones
           und Tablets.
@@ -10620,7 +10620,7 @@ class YuGiOhApp(App):
                 else:
                     bubble.width = metrics["source_bubble_w"]
                     bubble.height = metrics["bubble_h"] if open_state else 0
-                # Opacity zuerst setzen: DarkButton respektiert seit v12.0.0
+                # Opacity zuerst setzen: DarkButton respektiert seit v12.0.1
                 # explizit unsichtbare deaktivierte Overlay-Elemente.
                 bubble.opacity = 1 if open_state else 0
                 bubble.disabled = not open_state
@@ -11175,7 +11175,7 @@ class YuGiOhApp(App):
         lines = [
             "Scanner-Zeiten pro einzelner Kartenfläche",
             "",
-            "KI-Ensemble v12.0.0: " + model_stack_summary(),
+            "KI-Ensemble v12.0.1: " + model_stack_summary(),
             "",
             "Die Zielwerte gelten bei installierter lokaler Kartendatenbank. ",
             "Große/unscharfe Bilder und der erste Modellstart können länger dauern.",
@@ -11545,7 +11545,7 @@ class YuGiOhApp(App):
         return output
 
     def detect_card_regions(self, path, max_cards=64):
-        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v12.0.0.
+        """Multi-Engine-Erkennung für Galerie-/Ordnerseiten in v12.0.1.
 
         YOLO, MediaPipe, native/Python-OpenCV und der bisherige Pillow-Pfad
         stimmen gemeinsam über jede Kartenfläche ab. Die Resultate werden per
@@ -14242,7 +14242,7 @@ class YuGiOhApp(App):
         results = list(results or [])
         errors = list(errors or [])
 
-        # v12.0.0: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
+        # v12.0.1: Keine Gruppierung über verschiedene Bildquellen mehr. Jeder
         # Galerie-Import bleibt als eigenständiger Prüfeintrag mit genau seinem
         # Vorschaubild, Scan-Crop, Artwork und seinen Kandidaten erhalten.
         grouped_results = []

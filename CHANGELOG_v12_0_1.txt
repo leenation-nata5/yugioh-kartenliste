@@ -1,7 +1,26 @@
-Just InCard v12.0.0
-Build: 1200
+Just InCard v12.0.1
+Build: 1201
 Channel: stable
 Programmierer/Admin: leenation
+
+Build-Hotfix gegenüber v12.0.0
+
+- Build-Logs-7 vollständig ausgewertet: Der Abbruch entstand vor Gradle beim
+  Host-Staging des Android-Wheels
+  charset_normalizer-3.5.1-cp314-cp314-android_24_arm64_v8a.whl.
+- charset-normalizer auf die geprüfte universelle Ausgabe 3.4.9 fixiert; sie
+  bleibt mit requests kompatibel und lässt sich vom p4a-Host-pip installieren.
+- Den wirkungslosen python-for-android-Quellpatch entfernt. Buildozer hatte die
+  gepatchte Datei vor dem eigentlichen Build wieder auf den Release-Stand
+  zurückgesetzt.
+- Neuer Vorabprüfer ci/verify_android_python_packages.py verhindert einen
+  fehlenden oder schwebenden Pin schon vor dem lang laufenden Android-Build.
+- python-for-android-Commit 58d21141f17c889bf8585f5665921d72028f8831 wird
+  im Workflow nach dem Checkout explizit geprüft.
+- Neuer Regressionstest test_v1201_android_build_fix.py bildet den exakten
+  Fehler aus Build-Logs-7 nach und lehnt das problematische Android-Wheel ab.
+- Eigener Build-1201-Cache verhindert die Wiederverwendung fehlerhafter
+  Zwischenstände aus Build 1200.
 
 Vollständige UI-, Scanner-, Leistungs- und Qualitätsüberarbeitung
 

@@ -13,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-EXPECTED_VERSION = "12.0.0"
+EXPECTED_VERSION = "12.0.1"
 ROOT = Path(__file__).resolve().parent
 REPORT_DIR = ROOT / "logs"
 REPORT_DIR.mkdir(exist_ok=True)
@@ -41,7 +41,7 @@ def check_required_files():
         "app_logo.png", "app_logo_transparent.png", "app_icon.png", "preview_placeholder.png",
         "presplash.png", "just_incard_local_seed.json", "just_incard_source_registry.json",
         ".github/workflows/build-android-apk.yml",
-        "tests/test_v96_ui_contract.py", "tests/test_v97_core.py", "tests/test_v97_ui_contract.py", "tests/test_v100_scanner_contract.py", "tests/test_v101_ai_scanner_contract.py", "tests/test_v102_max_ai_contract.py", "tests/test_v104_features_contract.py", "tests/test_v107_isolated_gallery_contract.py", "tests/test_v108_strict_scanner_contract.py", "tests/test_v1081_startup_transition_contract.py", "tests/test_v109_multiengine_ai_contract.py", "tests/test_v1091_gallery_multiengine_contract.py", "tests/test_v1092_gradle_build_contract.py", "tests/test_v1093_manifest_hook_contract.py", "tests/test_v110_responsive_contract.py", "tests/test_v110_ui_contract.py", "tests/test_v1101_java_hotfix_contract.py", "tests/test_v1102_gradle_memory_contract.py", "tests/test_v112_scanner_ui_contract.py", "tests/test_v1123_ci_legacy_contract_hotfix.py", "tests/test_v1123_repository_overlay_contract.py", "tests/test_v1123_p4a_android_wheel_contract.py", "tests/test_v113_ui_performance_contract.py", "models/ai_models_manifest.json", "android_src/org/yugioh/kartenliste/NativeAiScanner.java", "ci/justincard-ci-test.keystore", "ci/patch_p4a_android_wheels.py", "assets/ui/app_mark.png",
+        "tests/test_v96_ui_contract.py", "tests/test_v97_core.py", "tests/test_v97_ui_contract.py", "tests/test_v100_scanner_contract.py", "tests/test_v101_ai_scanner_contract.py", "tests/test_v102_max_ai_contract.py", "tests/test_v104_features_contract.py", "tests/test_v107_isolated_gallery_contract.py", "tests/test_v108_strict_scanner_contract.py", "tests/test_v1081_startup_transition_contract.py", "tests/test_v109_multiengine_ai_contract.py", "tests/test_v1091_gallery_multiengine_contract.py", "tests/test_v1092_gradle_build_contract.py", "tests/test_v1093_manifest_hook_contract.py", "tests/test_v110_responsive_contract.py", "tests/test_v110_ui_contract.py", "tests/test_v1101_java_hotfix_contract.py", "tests/test_v1102_gradle_memory_contract.py", "tests/test_v112_scanner_ui_contract.py", "tests/test_v1123_ci_legacy_contract_hotfix.py", "tests/test_v1123_repository_overlay_contract.py", "tests/test_v1201_android_build_fix.py", "tests/test_v113_ui_performance_contract.py", "models/ai_models_manifest.json", "android_src/org/yugioh/kartenliste/NativeAiScanner.java", "ci/justincard-ci-test.keystore", "ci/verify_android_python_packages.py", "assets/ui/app_mark.png",
         "assets/ui/search.png", "assets/ui/scan.png", "assets/ui/cards.png",
         "assets/ui/decks.png", "assets/ui/more.png",
         "ui_v120.py", "features_v120.py", "data_packs_v120.py",
@@ -54,7 +54,7 @@ def check_required_files():
         "scripts/scan_benchmark_v120.py", "tests/fixtures/scan_corpus/manifest.example.json",
         "UI_V120_DESIGN.md", "docs/OFFLINE_DELTA_PACK_V120.md",
         "docs/TESTMATRIX_V120.md", "docs/DATENSCHUTZ_V120.md",
-        "CHANGELOG_v12_0_0.txt",
+        "CHANGELOG_v12_0_1.txt",
     ]
     for name in required:
         path = ROOT / name
@@ -168,7 +168,7 @@ def check_version_consistency():
     required_fragments = [
         "from app_version import APP_VERSION", "actions/checkout@v4",
         "actions/cache@v4", "actions/upload-artifact@v4",
-        "android debug", "android release", "apksigner", "jarsigner", "build_aab:", "android.release_artifact = aab", "tests/test_v100_scanner_contract.py", "tests/test_v101_ai_scanner_contract.py", "tests/test_v102_max_ai_contract.py", "tests/test_v104_features_contract.py", "tests/test_v107_isolated_gallery_contract.py", "tests/test_v108_strict_scanner_contract.py", "tests/test_v1081_startup_transition_contract.py", "tests/test_v109_multiengine_ai_contract.py", "tests/test_v1091_gallery_multiengine_contract.py", "tests/test_v1092_gradle_build_contract.py", "tests/test_v1093_manifest_hook_contract.py", "tests/test_v110_responsive_contract.py", "tests/test_v110_ui_contract.py", "tests/test_v1101_java_hotfix_contract.py", "tests/test_v1102_gradle_memory_contract.py", "tests/test_v112_scanner_ui_contract.py", "tests/test_v1123_ci_legacy_contract_hotfix.py", "tests/test_v1123_repository_overlay_contract.py", "tests/test_v1123_p4a_android_wheel_contract.py", "tests/test_v113_ui_performance_contract.py", "tests/test_v120_core_contract.py", "tests/test_v120_responsive_fuzz.py", "tests/test_v120_android_scanner_contract.py", "tests/test_v120_release_contract.py", "ci/patch_p4a_android_wheels.py", "python-for-android vorladen", "Android-Wheel-Staging-Hotfix anwenden", "not a supported wheel", "Alte Versionsdateien aus Overlay-Upload bereinigen", "prepare_ai_models_v109.py --extended",
+        "android debug", "android release", "apksigner", "jarsigner", "build_aab:", "android.release_artifact = aab", "tests/test_v100_scanner_contract.py", "tests/test_v101_ai_scanner_contract.py", "tests/test_v102_max_ai_contract.py", "tests/test_v104_features_contract.py", "tests/test_v107_isolated_gallery_contract.py", "tests/test_v108_strict_scanner_contract.py", "tests/test_v1081_startup_transition_contract.py", "tests/test_v109_multiengine_ai_contract.py", "tests/test_v1091_gallery_multiengine_contract.py", "tests/test_v1092_gradle_build_contract.py", "tests/test_v1093_manifest_hook_contract.py", "tests/test_v110_responsive_contract.py", "tests/test_v110_ui_contract.py", "tests/test_v1101_java_hotfix_contract.py", "tests/test_v1102_gradle_memory_contract.py", "tests/test_v112_scanner_ui_contract.py", "tests/test_v1123_ci_legacy_contract_hotfix.py", "tests/test_v1123_repository_overlay_contract.py", "tests/test_v1201_android_build_fix.py", "tests/test_v113_ui_performance_contract.py", "tests/test_v120_core_contract.py", "tests/test_v120_responsive_fuzz.py", "tests/test_v120_android_scanner_contract.py", "tests/test_v120_release_contract.py", "ci/verify_android_python_packages.py", "Android-Python-Abhängigkeiten prüfen", "python-for-android reproduzierbar vorladen und prüfen", "EXPECTED_P4A_COMMIT", "58d21141f17c889bf8585f5665921d72028f8831", "not a supported wheel", "Alte Versionsdateien aus Overlay-Upload bereinigen", "prepare_ai_models_v109.py --extended",
     ]
     for fragment in required_fragments:
         if fragment not in workflow_text:
@@ -182,12 +182,21 @@ def check_buildozer_spec():
     workflow_text = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
     req_match = re.search(r"^requirements\s*=\s*(.+)$", text, re.M)
     requirements = {part.strip().lower() for part in (req_match.group(1).split(",") if req_match else [])}
-    required = {"python3", "kivy", "openssl", "certifi", "pyjnius", "plyer", "pillow", "qrcode"}
+    required = {"python3", "kivy", "openssl", "certifi", "charset_normalizer==3.4.9", "pyjnius", "plyer", "pillow", "qrcode"}
     missing = sorted(required - requirements)
     if missing:
         error("Buildozer-Abhängigkeiten fehlen: " + ", ".join(missing))
     else:
         ok("Buildozer-Abhängigkeiten vollständig")
+
+    if "charset_normalizer==3.4.9" not in requirements:
+        error("Android-sicherer charset-normalizer-Pin 3.4.9 fehlt")
+    else:
+        ok("charset-normalizer ist auf universelles Wheel 3.4.9 fixiert")
+    if "ci/patch_p4a_android_wheels.py" in workflow_text or "Android-Wheel-Staging-Hotfix anwenden" in workflow_text:
+        error("Der von Buildozer überschriebene p4a-Quellpatch darf nicht mehr verwendet werden")
+    else:
+        ok("Wirkungsloser p4a-Quellpatch wurde aus dem Workflow entfernt")
 
     dependencies = (
         "com.google.mlkit:text-recognition:16.0.1",
@@ -213,7 +222,7 @@ def check_buildozer_spec():
         "pickFirst 'lib/**/libc++_shared.so'",
         "sourceCompatibility = 1.8",
         "targetCompatibility = 1.8",
-        "android.numeric_version = 1200",
+        "android.numeric_version = 1201",
         "android.ndk = 27c",
         "p4a.branch = v2026.05.09",
     ):
@@ -253,7 +262,7 @@ def check_buildozer_spec():
         else:
             ok(f"Manifest-Hook enthält: {fragment}")
 
-    # v12.0.0: Build #36 startete Gradle nur mit -Xmx512m und lief beim
+    # v12.0.1: Build #36 startete Gradle nur mit -Xmx512m und lief beim
     # JetifyTransform von opencv-4.12.0.aar in java.lang.OutOfMemoryError.
     for fragment in (
         "def _patch_gradle_properties",
@@ -272,7 +281,7 @@ def check_buildozer_spec():
         "tests/test_v1102_gradle_memory_contract.py",
         "runner_memory_before_build.log",
         "gradle_properties_effective.log",
-        "just-incard-v1200-arm64-api35-ndk27c",
+        "just-incard-v1201-arm64-api35-ndk27c",
     ):
         if fragment not in workflow_text:
             error(f"Workflow-Speicherdiagnose fehlt: {fragment}")
@@ -290,7 +299,7 @@ def check_buildozer_spec():
     arch_match = re.search(r"^android\.archs\s*=\s*(.+)$", text, re.M)
     archs = [item.strip() for item in (arch_match.group(1).split(",") if arch_match else []) if item.strip()]
     if archs != ["arm64-v8a"]:
-        error(f"Android-Architekturen müssen in v12.0.0 genau arm64-v8a sein: {archs}")
+        error(f"Android-Architekturen müssen in v12.0.1 genau arm64-v8a sein: {archs}")
     else:
         ok("Android-Architektur ist ausschließlich arm64-v8a")
     if "android.release_artifact = apk" not in text:
@@ -326,7 +335,7 @@ def check_buildozer_spec():
         else:
             ok(f"Native KI-Brücke enthält: {fragment}")
 
-    # v12.0.0: OpenCV Rect.area() liefert double. Integer.compare() würde
+    # v12.0.1: OpenCV Rect.area() liefert double. Integer.compare() würde
     # compileDebugJavaWithJavac mit "possible lossy conversion from double to int" abbrechen.
     bad_area_compare = re.search(r"Integer\.compare\([^\n;]*\.area\(\)[^\n;]*\)", java_text)
     if bad_area_compare:
@@ -347,7 +356,7 @@ def cleanup_stale_release_files():
     Bereinigt werden ausschließlich versionierte Just-InCard-Changelogs im
     Repository-Stamm; andere Dateien bleiben unangetastet.
     """
-    expected = "CHANGELOG_v12_0_0.txt"
+    expected = "CHANGELOG_v12_0_1.txt"
     removed = []
     for path in ROOT.glob("CHANGELOG_v*.txt"):
         if path.name == expected:
@@ -366,11 +375,11 @@ def cleanup_stale_release_files():
 
 def check_current_text_files():
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    expected = ["CHANGELOG_v12_0_0.txt"]
+    expected = ["CHANGELOG_v12_0_1.txt"]
     if txt_files != expected:
         error(f"TXT-Dateien entsprechen nach automatischer Bereinigung nicht der Nur-aktuelle-Version-Regel: {txt_files}")
     else:
-        ok("Nur der aktuelle Changelog CHANGELOG_v12_0_0.txt wird ausgeliefert")
+        ok("Nur der aktuelle Changelog CHANGELOG_v12_0_1.txt wird ausgeliefert")
 
 
 

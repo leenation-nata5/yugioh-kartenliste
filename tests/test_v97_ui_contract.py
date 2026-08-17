@@ -95,7 +95,7 @@ def run():
     assert (ROOT / "features_v97.py").is_file()
     assert (ROOT / "ci" / "justincard-ci-test.keystore").is_file()
 
-    print("v9.7 UI compatibility under v12.0.0: OK")
+    print("v9.7 UI compatibility under v12.0.1: OK")
 
 
 if __name__ == "__main__":

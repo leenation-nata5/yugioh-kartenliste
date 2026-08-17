@@ -23,8 +23,8 @@ def run():
     )
     from security_v104 import DEVELOPER_NAME, ADMIN_NAME
 
-    assert APP_VERSION == "12.0.0"
-    assert APP_BUILD == 1200
+    assert APP_VERSION == "12.0.1"
+    assert APP_BUILD == 1201
     assert APP_DEVELOPER == APP_ADMIN == "leenation"
     assert FEATURE_DEVELOPER == FEATURE_ADMIN == "leenation"
     assert DEVELOPER_NAME == ADMIN_NAME == "leenation"
@@ -85,8 +85,8 @@ def run():
     assert "txt,md" not in spec
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v12_0_0.txt"], txt_files
-    print("v12.0.0 features/security/tablet contract tests: OK")
+    assert txt_files == ["CHANGELOG_v12_0_1.txt"], txt_files
+    print("v12.0.1 features/security/tablet contract tests: OK")
 
 
 if __name__ == "__main__":

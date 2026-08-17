@@ -55,7 +55,7 @@ def run() -> None:
     assert "p4a.branch = v2026.05.09" in spec
     assert "android.minapi = 24" in spec
     assert "android.api = 35" in spec
-    print("v12.0.0 Android CameraX/Keystore contract tests: OK")
+    print("v12.0.1 Android CameraX/Keystore contract tests: OK")
 
 
 if __name__ == "__main__":

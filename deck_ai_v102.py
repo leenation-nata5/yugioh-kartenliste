@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Lokaler sammlungsbasierter KI-Deckbauer für Just InCard v12.0.0."""
+"""Lokaler sammlungsbasierter KI-Deckbauer für Just InCard v12.0.1."""
 from __future__ import annotations
 import re, unicodedata
 from collections import Counter

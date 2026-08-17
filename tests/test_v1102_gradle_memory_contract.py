@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Regressionstest für den Gradle/OpenCV-Speicher-Hotfix in Just InCard v12.0.0."""
+"""Regressionstest für den Gradle/OpenCV-Speicher-Hotfix in Just InCard v12.0.1."""
 from __future__ import annotations
 
 import importlib.util
@@ -15,8 +15,8 @@ sys.path.insert(0, str(ROOT))
 def run():
     from app_version import APP_VERSION, APP_BUILD
 
-    assert APP_VERSION == "12.0.0"
-    assert APP_BUILD == 1200
+    assert APP_VERSION == "12.0.1"
+    assert APP_BUILD == 1201
 
     hook_path = ROOT / "p4a_manifest_hook.py"
     module_spec = importlib.util.spec_from_file_location("p4a_manifest_hook_v1102", hook_path)
@@ -52,17 +52,17 @@ def run():
 
     spec = (ROOT / "buildozer.spec").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/build-android-apk.yml").read_text(encoding="utf-8")
-    assert re.search(r"^version\s*=\s*12\.0\.0\s*$", spec, re.M)
-    assert "android.numeric_version = 1200" in spec
+    assert re.search(r"^version\s*=\s*12\.0\.1\s*$", spec, re.M)
+    assert "android.numeric_version = 1201" in spec
     assert "org.opencv:opencv:4.12.0" in spec
-    assert "just-incard-v1200-arm64-api35-ndk27c" in workflow
+    assert "just-incard-v1201-arm64-api35-ndk27c" in workflow
     assert "tests/test_v1102_gradle_memory_contract.py" in workflow
     assert "runner_memory_before_build.log" in workflow
     assert "gradle_properties_effective.log" in workflow
 
     txt_files = sorted(path.name for path in ROOT.glob("*.txt"))
-    assert txt_files == ["CHANGELOG_v12_0_0.txt"], txt_files
-    print("v12.0.0 Gradle/OpenCV memory hotfix contract tests: OK")
+    assert txt_files == ["CHANGELOG_v12_0_1.txt"], txt_files
+    print("v12.0.1 Gradle/OpenCV memory hotfix contract tests: OK")
 
 
 if __name__ == "__main__":

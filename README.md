@@ -1,4 +1,4 @@
-# Just InCard v12.0.0
+# Just InCard v12.0.1
 
 Just InCard ist eine adaptive Android-App für Kartensuche, Live-/Foto-/Galeriescan, Sammlung und Deckplanung. Version 12 ersetzt starre Bildschirmpositionen durch ein fensterbasiertes Designsystem und erweitert Scanner, Performance, Datensicherheit und Austauschformate.
 
@@ -17,6 +17,23 @@ Programmierer / Administrator: `leenation`
 - validierte Offline-Delta-Pakete mit Rollback;
 - Android-Keystore für API-Schlüssel und optionale gerätegebundene AES-GCM-Backups;
 - reproduzierbarer GitHub-Build für Debug-APK, signierte Release-APK und optionales Google-Play-AAB.
+
+## Buildkorrektur in v12.0.1
+
+Der bereitgestellte Build-Log 7 brach vor Gradle beim Installieren von
+`charset_normalizer-3.5.1-cp314-cp314-android_24_arm64_v8a.whl` ab. Der zuvor
+eingesetzte Patch an der ausgecheckten python-for-android-Datei war wirkungslos,
+weil Buildozer diesen Checkout vor dem eigentlichen Build aktualisiert.
+
+v12.0.1 löst das reproduzierbar im Projekt selbst:
+
+- `charset_normalizer==3.4.9` bleibt beim p4a-Host-Staging ein universelles
+  `py3-none-any`-Wheel;
+- der veraltete p4a-Quellpatch wurde vollständig entfernt;
+- Workflow und Preflight prüfen Pin, Toolchain-Commit und einen eigenen
+  Build-Logs-7-Regressionstest vor dem mehrstündigen Android-Build;
+- der Cache-Namensraum wurde auf Build 1201 geändert, damit keine fehlerhafte
+  Zwischenablage aus Build 1200 wiederverwendet wird.
 
 ## Projekt lokal prüfen
 
@@ -39,7 +56,7 @@ Die v12-Schwerpunkte liegen in:
 
 ## Android mit GitHub Actions bauen
 
-1. Den Inhalt des Ordners `JustInCard_v12_0_0` direkt in die Wurzel eines GitHub-Repositorys kopieren.
+1. Den Inhalt des Ordners `JustInCard_v12_0_1` direkt in die Wurzel eines GitHub-Repositorys kopieren.
 2. Prüfen, dass `main.py`, `buildozer.spec`, `app_version.py`, `.github`, `android_src` und `tests` direkt dort liegen.
 3. Commit pushen und unter **Actions → Build Android APKs und optionales AAB → Run workflow** starten.
 4. Optional `build_aab` für ein Google-Play-App-Bundle aktivieren.
@@ -93,7 +110,7 @@ Weitere Hinweise:
 
 - `docs/DATENSCHUTZ_V120.md`
 - `docs/OFFLINE_DELTA_PACK_V120.md`
-- `CHANGELOG_v12_0_0.txt`
+- `CHANGELOG_v12_0_1.txt`
 
 ## Unterstützungsrahmen
 

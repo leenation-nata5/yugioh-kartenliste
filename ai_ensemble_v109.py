@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Multi-Engine-KI-Orchestrator für Just InCard v12.0.0.
+"""Multi-Engine-KI-Orchestrator für Just InCard v12.0.1.
 
 Die Datei bleibt importierbar, auch wenn einzelne native/optionale KI-Runtimes auf
 Android nicht vorhanden sind. Der Scanner nutzt immer die verfügbaren Engines und

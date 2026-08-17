@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Strenge Scan-Identifikation für Just InCard v12.0.0.
+"""Strenge Scan-Identifikation für Just InCard v12.0.1.
 
 Kivy-unabhängige Hilfen für:
 - feste Suchreihenfolge Set-Code -> Passcode -> Name/Effekt/Artwork

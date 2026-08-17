@@ -13,8 +13,8 @@ sys.path.insert(0, str(ROOT))
 def run() -> None:
     from app_version import APP_BUILD, APP_VERSION
 
-    assert APP_VERSION == "12.0.0"
-    assert APP_BUILD == 1200
+    assert APP_VERSION == "12.0.1"
+    assert APP_BUILD == 1201
 
     main = (ROOT / "main.py").read_text(encoding="utf-8")
     ui = (ROOT / "ui_v110.py").read_text(encoding="utf-8")
@@ -59,13 +59,13 @@ def run() -> None:
     assert "height=dp(224 if compact else 176)" not in main
     assert "source_card.height = dp(230 if current_source_cols == 1 else 118)" not in main
     assert "row_default_height=dp(48)" in main
-    assert re.search(r"^version\s*=\s*12\.0\.0\s*$", spec, re.M)
-    assert "android.numeric_version = 1200" in spec
-    assert "just-incard-v1200-arm64-api35-ndk27c" in workflow
+    assert re.search(r"^version\s*=\s*12\.0\.1\s*$", spec, re.M)
+    assert "android.numeric_version = 1201" in spec
+    assert "just-incard-v1201-arm64-api35-ndk27c" in workflow
     assert "tests/test_v110_responsive_contract.py" in workflow
     assert "tests/test_v110_ui_contract.py" in workflow
-    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_0.txt"]
-    print("v12.0.0 modern responsive UI/scanner contract tests: OK")
+    assert sorted(path.name for path in ROOT.glob("*.txt")) == ["CHANGELOG_v12_0_1.txt"]
+    print("v12.0.1 modern responsive UI/scanner contract tests: OK")
 
 
 if __name__ == "__main__":

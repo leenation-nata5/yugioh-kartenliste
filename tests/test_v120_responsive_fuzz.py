@@ -79,7 +79,7 @@ def run() -> None:
         assert fragment in main_source, fragment
 
     assert profiles > 8_000
-    print(f"v12.0.0 responsive fuzz matrix: {profiles} viewport states OK")
+    print(f"v12.0.1 responsive fuzz matrix: {profiles} viewport states OK")
 
 
 if __name__ == "__main__":
